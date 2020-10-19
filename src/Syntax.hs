@@ -1,11 +1,15 @@
 module Syntax where
 
+import qualified Data.Text as T
+
 type Table = String
 type FieldName = String
 type FieldValue = String
-data FieldType = IntType | TextType | BoolType
+data FieldType = IntType Int
+               | TextType T.Text
+               | BoolType Bool
 
-type ComparisonOp = Eq | Gt | Gte | Lt | Lte
+data ComparisonOp = Eq | Gt | Gte | Lt | Lte
 type Condition = (FieldName, ComparisonOp, FieldValue)
 
 type IsPKey = Bool
