@@ -13,7 +13,7 @@ A [Recurse Center](https://www.recurse.com/) FP study group project.
 * Table interactions: simple `CREATE` and `DROP` only 
 * Record interactions: simple `SELECT`, `INSERT` and `DELETE` only
 * Record data types: support for `Int`, `Text`, and `Bool` types only 
-* Single-index tables, where index column of type `Int must be specified explicitly on table creation 
+* Single-index tables, where index column of type `Int` must be specified explicitly on table creation 
 
 
 ## References
