@@ -15,7 +15,7 @@ find :: (Ord a, Eq a) => Tree a -> a -> Bool
 find (Nil _) _ = False
 find (Leaf _ []) _ = False
 find (Leaf m (k:ks)) x
-  | x == k = True```
+  | x == k = True
   | x < k  = False
   | x > k  = find (Leaf m ks) x
 find (Node _ [] (t:ts)) x = find t x

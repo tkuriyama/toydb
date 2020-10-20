@@ -18,7 +18,7 @@ makeTree n = fromList [1..n] empty
 --   5
 fromList :: (Ord a) => [a] -> Tree a -> Tree a  
 fromList as t =
-   foldr (\a acc -> insert a acc) t as
+   foldr (\a acc -> insert acc a) t as
 
 
 t99 :: Tree Int
