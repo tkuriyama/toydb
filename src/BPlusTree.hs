@@ -1,15 +1,15 @@
 -- This module compiles and one can run, for example,
 -- the function 'makeTree' as illustrated below.
--- However, the results are incorrect: in the
--- second example, the second leaf should be
---
---      Leaf 2 [3,4] [3,4]  
+-- Still more thinking and testing to do on this
+-- to see if it is doing what it is supposed to
+-- be doing.
 --
 --
 -- *BPlusTree> makeTree 2
 -- Leaf 2 [1,2] [1,2]
+--
 -- *BPlusTree> makeTree 4
--- Node 2 [3] [Leaf 2 [1,2] [1,2], Leaf 2 [4] [3,4]]
+-- NNode 2 [3] [Leaf 2 [1,2] [1,2],Leaf 2 [3,4] [3,4]]
 
 
 module BPlusTree where
@@ -61,12 +61,12 @@ insert_non_full n@(Node m keys@(k:ks)  trees@(t:ts)) x y
           Node _ [newK] [newT1, newT2] = split t
 
 split :: (Ord k, Eq k) => BPTree k v -> BPTree k v
-split (Leaf m keys values) = Node m [k] [Leaf m k1 v1, Leaf m k2 (v:v2)]
+split (Leaf m keys values) = Node m [k] [Leaf m k1 v1, Leaf m (k:k2) (v:v2)]
   where k1 = first_half keys
         k:k2 = last_half keys
         v1 = first_half values
         v:v2 = last_half values
-split (Node m keys trees) = Node m [k] [Node m k1 t1, Node m k2 t2]
+split (Node m keys trees) = Node m [k] [Node m k1 t1, Node m (k:k2) t2]
   where k1 = first_half keys
         k:k2 = last_half keys
         t1 = first_half trees
