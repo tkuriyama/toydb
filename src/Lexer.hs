@@ -8,17 +8,20 @@ import qualified Text.Parsec.Token as Tok
 lexer :: Tok.TokenParser ()
 lexer = Tok.makeTokenParser style
   where
-    ops = ["=", ">", ">=", "<", "<=", ";", "*"]
+    ops = ["=", ">", ">=", "<", "<=", "*"]
     names =
-      [ "create",
-        "drop",
-        "select",
-        "from",
-        "insert",
-        "into",
-        "delete",
-        "true",
-        "false"
+      [ "Create",
+        "Drop",
+        "Select",
+        "From",
+        "Insert",
+        "Into",
+        "Delete",
+        "True",
+        "False",
+        "Int",
+        "Bool",
+        "Text"
       ]
     style =
       emptyDef
@@ -30,8 +33,8 @@ lexer = Tok.makeTokenParser style
 integer :: Parser Integer
 integer = Tok.integer lexer
 
-string' :: Parser String
-string' = Tok.stringLiteral lexer
+string :: Parser String
+string = Tok.stringLiteral lexer
 
 parens :: Parser a -> Parser a
 parens = Tok.parens lexer
@@ -42,10 +45,17 @@ brackets = Tok.brackets lexer
 identifier :: Parser String
 identifier = Tok.identifier lexer
 
+comma :: Parser String
+comma = Tok.comma lexer
+
 commaSep :: Parser a -> Parser [a]
 commaSep = Tok.commaSep lexer
 
---reserved :: String -> Parser ()
+semi :: Parser String
+semi = Tok.semi lexer
+
+
+reserved :: String -> Parser ()
 reserved = Tok.reserved lexer
 
 reservedOp :: String -> Parser ()

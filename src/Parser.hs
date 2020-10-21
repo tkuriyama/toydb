@@ -1,53 +1,103 @@
 module Parser where
 
-import qualified Data.Text as T
-import Lexer
+import qualified Lexer as L
 import Syntax
-import Text.Parsec
+
+import qualified Data.Text as T
+
+import Text.Parsec (many, ParseError, parse, (<|>))
 import qualified Text.Parsec.Expr as Ex
 import Text.Parsec.String (Parser)
 import qualified Text.Parsec.Token as Tok
 
-intValue :: Parser FieldValue
-intValue = do
-  n <- integer
-  return $ FvInt (fromInteger n)
+-- Create
+-- Create MyTable [(False, MyFieldName, Bool), (True, MyPrimaryFieldname, Int)]
 
-textValue :: Parser FieldValue
-textValue = do
-  s <- string'
-  return $ FvText (T.pack s)
+create :: Parser Expr
+create = do
+  L.reserved "Create"
+  name <- L.identifier
+  columns <- L.brackets $ L.commaSep $ L.parens column
+  L.semi
+  return $ Create name columns
+
+column :: Parser Column
+column = f <$> pkey <*> L.comma <*> fieldName <*> L.comma <*> fieldType
+  where f a _ b _ c = Column a b c
+
+-- Drop
+-- Drop MyTable
+
+dropP :: Parser Expr
+dropP = do
+  L.reserved "Drop"
+  name <- L.identifier
+  L.semi
+  return $ Drop name
+
+-- Select
+-- Select From MyTable...
+
+
+-- Insert
+-- Insert Into MyTable ...
+
+
+-- Delete
+-- Delete From MyTable...
+
+
+-- FIeld Name, Types and Values
+
+fieldName :: Parser FieldName
+fieldName = do
+  n <- L.identifier
+  return $ n
+
+fieldValue :: Parser FieldValue
+fieldValue = boolValue <|> intValue <|> textValue
 
 boolValue :: Parser FieldValue
 boolValue = boolTrue <|> boolFalse
+  where 
+    boolTrue :: Parser FieldValue
+    boolTrue = do
+      L.reserved "True"
+      return $ FvBool True
+    boolFalse :: Parser FieldValue
+    boolFalse = do
+      L.reserved "False"
+      return $ FvBool False
 
-boolTrue :: Parser FieldValue
-boolTrue = do
-  reserved "true"
-  return $ FvBool True
+intValue :: Parser FieldValue
+intValue = do
+  n <- L.integer
+  return $ FvInt (fromInteger n)
+textValue :: Parser FieldValue
 
-boolFalse :: Parser FieldValue
-boolFalse = do
-  reserved "false"
-  return $ FvBool False
+textValue = do
+  s <- L.string
+  return $ FvText (T.pack s)
 
 fieldType :: Parser FieldType
 fieldType = boolType <|> intType <|> textType
 
+boolType :: Parser FieldType
+boolType = do
+  L.reserved "Bool"
+  return $ FtBool
+
 intType :: Parser FieldType
 intType = do
-  reserved "Int"
+  L.reserved "Int"
   return $ FtInt
 
 textType :: Parser FieldType
 textType = do
-  reserved "Text"
+  L.reserved "Text"
   return $ FtText
 
-boolType :: Parser FieldType
-boolType = do
-  reserved "Bool"
-  return $ FtBool
+-- Other Primitives 
 
 pkey :: Parser IsPKey
 pkey = f <$> boolValue
@@ -55,55 +105,21 @@ pkey = f <$> boolValue
     f (FvBool True) = True
     f (FvBool False) = False
 
-fieldName :: Parser FieldName
-fieldName = do
-  n <- string'
-  return $ n
+-- Helpers
 
-{-expr ::
-  Parser
-    Expr
-    create
-    <|> drop
-    <|> select
-    <|> insert
-    <|> delete
--}
+-- commaParser :: Parser ()
+-- commaParser = do
+--   L.reservedOp ","
+--   return ()
 
-commaParser :: Parser ()
-commaParser = do
-  reservedOp ","
-  return $ ()
+-- Run Parser
 
-column :: Parser Syntax.Column
-column = f <$> pkey <*> commaParser <*> fieldName <*> commaParser <*> fieldType
-  where
-    f a _ b _ c = Column a b c
+parseToplevel :: (Show a) => Parser a -> String -> Either ParseError a
+parseToplevel p s = parse p "<stdin>" s
 
--- CREATE MyTable [(False, MyFieldName, Bool), (True, MyPrimaryFieldname, Int)]
-create :: Parser Expr
-create = do
-  reserved "create"
-  name <- identifier
-  columns <- brackets $ many $ parens column
-  reservedOp ";"
-  return $ Create name columns
-
-drop :: Parser Expr
-drop = do
-  reserved "drop"
-  name <- identifier
-  reservedOp ";"
-  return $ Drop name
-
--- cond :: Parser Expr
--- cond = do
-parseToplevel :: String -> Either ParseError Expr
-parseToplevel s = parse Parser.create "<stdin>" s
-
-process :: String -> IO ()
-process line = do
-  let res = parseToplevel line
+process :: (Show a) => Parser a -> String -> IO ()
+process p line = do
+  let res = parseToplevel p line
   case res of
     Left err -> print err
-    Right ex -> print ex
+    Right s -> print s
