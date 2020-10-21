@@ -1,4 +1,4 @@
-module Repl where
+module Database.Repl where
 
 import Control.Monad (unless)
 import System.IO (stdout, hFlush)

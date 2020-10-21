@@ -17,4 +17,51 @@ executable toydb
   hs-source-dirs:      src
   main-is:             Main.hs
   default-language:    Haskell2010
-  build-depends:       base >= 4.7 && < 5
+  other-modules:
+      Database.Repl
+  build-depends:       
+      base >= 4.7 && < 5
+
+library
+  exposed-modules:
+      Database.Main
+      Database.Syntax
+      Database.BTree
+      Database.BPlusTree
+      Database.Serialize
+      Database.Database
+      Database.Parser
+      Database.Lexer
+      Database.Repl
+  hs-source-dirs:
+      src
+  default-extensions:
+  ghc-options: -Wall -fwarn-incomplete-uni-patterns -fno-warn-unused-binds -fno-warn-unused-do-bind -fno-warn-unused-imports -fno-warn-type-defaults -ferror-spans
+  build-depends:
+    base <5 && >=4
+    , containers >=0.4.0.0
+    , text >=1.2.4.0
+    , parsec >=3.1.14.0
+    , ghc >=8.8.4
+  default-language: Haskell2010
+
+test-suite database-tests
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Database.BTreeSpec
+      Database.BPlusTreeSpec
+      Database.SerializeSpec
+      Database.DatabaseSpec
+      Database.ParserSpec
+      Database.LexerSpec
+  hs-source-dirs:
+      test
+  ghc-options:
+  build-depends:
+      QuickCheck >=2.9
+    , base <5 && >=3
+    , hspec
+    , hspec-discover
+    , toydb >=0.1.0.0
+  default-language: Haskell2010
