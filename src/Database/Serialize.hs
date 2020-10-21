@@ -1,6 +1,6 @@
-module Serialize where
+module Database.Serialize where
 
-import Database
+import Database.Database
 import Data.Text as T
 
 serialize :: Database -> FilePath -> IO ()

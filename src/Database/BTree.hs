@@ -1,4 +1,4 @@
-module BTree where
+module Database.BTree where
 
 -- The code for this implementation of BTrees is found at 
 -- https://gist.github.com/yamaguchiyuto/3d303c51997cd2a0b084f37bc6308869

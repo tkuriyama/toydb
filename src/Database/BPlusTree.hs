@@ -12,7 +12,7 @@
 -- NNode 2 [3] [Leaf 2 [1,2] [1,2],Leaf 2 [3,4] [3,4]]
 
 
-module BPlusTree where
+module Database.BPlusTree where
 
 data BPTree k v = Nil Int | Leaf Int [k] [v] | Node Int [k] [BPTree k v] deriving Show
 

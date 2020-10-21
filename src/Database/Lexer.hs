@@ -1,4 +1,4 @@
-module Lexer where
+module Database.Lexer where
 
 import qualified Data.Text as T
 import Text.Parsec.Language (emptyDef)

@@ -1,4 +1,4 @@
-module Syntax where
+module Database.Syntax where
 
 import qualified Data.Text as T
 
