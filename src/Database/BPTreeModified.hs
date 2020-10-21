@@ -39,7 +39,7 @@ search (Node _ ks ts _) x = search child x
 locate :: (Ord k, Eq k) => BPTree k v -> k -> Maybe v
 locate t x = (vals !!) <$> idx
   where (Leaf _ keys vals _) = search t x
-        idx = elemIndex x keys
+        idx = L.elemIndex x keys
 
 -- INSERTION FUNCTIONS
 
@@ -58,28 +58,28 @@ insert (Leaf m keys vals par) x y = let (ks,vs) = intoAssoc x y (keys,vals) in L
 fixBranchingPlus :: (Ord k, Eq k) => BPTree k v -> k -> BPTree k v
 fixBranchingPlus t@(Nil _) _ = t
 fixBranchingPlus l@(Leaf m ks vs par) x
-  | (length ks) <= (2*m-1) = maybe l fixBranchingPlus par
-  | otherwise = fixBranchingPlus (place p x (split l)) --split this node, (re)place altered kids & key in parent, call fixBranching there
+  | (length ks) <= (2*m-1) = maybe l (`fixBranchingPlus` x) par
+  | otherwise = fixBranchingPlus (place p x (split l)) x --split this node, (re)place altered kids & key in parent, call fixBranching there
   where p = maybe (Nil m) id par
 fixBranchingPlus n@(Node m ks ts par) x
-  | (length ts) <= (2*m-1) = maybe n fixBranchingPlus par
-  | otherwise = fixBranchingPlus (place p x (split n)) --split this node, (re)place altered kids & key in parent, call fixBranching there
+  | (length ts) <= (2*m-1) = maybe n (`fixBranchingPlus` x) par
+  | otherwise = fixBranchingPlus (place p x (split n)) x --split this node, (re)place altered kids & key in parent, call fixBranching there
   where p = maybe (Nil m) id par
 
 -- Split a node into two (only done when capacity exactly hits 2*m)
 split :: (Ord k, Eq k) => BPTree k v -> (BPTree k v, BPTree k v)
 split (Nil m) = error "Splitting empty tree"
 split (Leaf m ks vs par) = ((Leaf m (take m ks) (take m vs) p), (Leaf m (drop m ks) (drop m vs) p))
-  where p = maybe (Nil m) id par
+  where p = Just (maybe (Nil m) id par)
 split (Node m ks ts par) = ((Node m (take (m-1) ks) (take (m-1) ts) p), (Node m (drop m ks) (drop m ts) p))
-  where p = maybe (Nil m) id par
+  where p = Just (maybe (Nil m) id par)
 
 -- Places a new key and tree pair into a node
 place :: (Ord k, Eq k) => BPTree k v -> k -> (BPTree k v, BPTree k v) -> BPTree k v
-place (Nil m) x (t0, t1) = Node m [x] [t0, t1] Empty
+place (Nil m) x (t0, t1) = Node m [x] [t0, t1] Nothing
 place (Leaf _ _ _ _) _ _ = error "Placing into leaf"
 place (Node m ks ts par) x (t0, t1) = Node m (L.insert x ks) (ls ++ [t0, t1] ++ rs) par
-  where idx = findIndex (< x) ks 
+  where idx = L.findIndex (< x) ks 
         shiftIdx mi = case mi of Nothing -> 0
                                  Just i -> i+1
         splitpt = shiftIdx idx
@@ -87,11 +87,12 @@ place (Node m ks ts par) x (t0, t1) = Node m (L.insert x ks) (ls ++ [t0, t1] ++ 
         
 -- Puts key + value into proper positions in a pair of lists (used for inserting into leaf node)
 intoAssoc :: (Ord k, Eq k) => k -> v -> ([k],[v]) -> ([k],[v])
-intoAssoc x y ([],vs) = ([x],v:vs) -- should only occur with vs = []
+intoAssoc x y ([],vs) = ([x],y:vs) -- should only occur with vs = []
 intoAssoc x y (keys@(k:ks),vals@(v:vs))
   | x < k = (x:keys,y:vals)
   | x == k = (x:ks,y:vs)
-  | otherwise = (<$>) $ (:) $ (k,v) (intoAssoc x y (ks,vs))
+  | otherwise = tupleCons (k,v) (intoAssoc x y (ks,vs))
+    where tupleCons (a,b) (as,bs) = (a:as, b:bs)
 
 -- DELETION FUNCTIONS (INCOMPLETE)
 {-
@@ -139,7 +140,6 @@ shift = undefined
 -- Merges two nodes into one
 --merge ::
 merge = undefined
--}
                                      
 -- Takes key + corresponding value out of associated pair of lists (used for deleting from leaf node)
 outOfAssoc :: (Ord k, Eq k) => k -> ([k],[v]) -> ([k],[v])
@@ -148,6 +148,7 @@ outOfAssoc x pair@(keys@(k:ks),vals@(v:vs))
   | x < k = pair
   | x == k = (ks,vs)
   | otherwise = (<$>) $ (:) $ (k,v) (outOfAssoc x (ks,vs))
+-}
   
 -- TESTING FUNCTIONS
 
