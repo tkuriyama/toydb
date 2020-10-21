@@ -1,7 +1,7 @@
-module Parser where
+module Database.Parser where
 
-import qualified Lexer as L
-import Syntax
+import qualified Database.Lexer as L
+import Database.Syntax
 
 import qualified Data.Text as T
 

@@ -1,6 +1,6 @@
-module Database where
+module Database.Database where
 
-import Syntax
+import Database.Syntax
 
 import Data.Text as T
 
