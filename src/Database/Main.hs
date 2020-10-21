@@ -1,4 +1,4 @@
-module Main where
+module Database.Main where
 
 import Database.Repl (repl)
 

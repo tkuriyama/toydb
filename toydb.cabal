@@ -22,6 +22,7 @@ executable toydb
       Database.Lexer
       Database.Parser
       Database.Repl
+      Database.Main
   build-depends:       
       base >= 4.7 && < 5
       , text
