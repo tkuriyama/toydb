@@ -1,5 +1,6 @@
 module Main where
 
+import Repl (repl)
+
 main :: IO ()
-main = do
-  putStrLn "hello world"
+main = repl
