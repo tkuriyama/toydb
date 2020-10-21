@@ -7,12 +7,14 @@ import Database.Parser
 
 import Data.Text as T
 
+data Database = Placeholder
+
 execExpr :: Database -> Expr -> Database
 execExpr db expr =
   case expr of
     (Create tbl cols) -> createTable db tbl cols
     (Drop tbl) -> dropTable db tbl
-    (Select tbl conds) -> select db tbl conds
+    (Select fs tbl conds) -> select db fs tbl conds
     (Insert tbl fvs) -> insert db tbl fvs
     (Delete tbl conds) -> delete db tbl conds
 
@@ -22,7 +24,7 @@ createTable = undefined
 dropTable :: Database -> Table -> Database
 dropTable = undefined      
 
-select :: Database -> Table -> [Condition] -> Database
+select :: Database -> FieldSelect -> Table -> [Condition] -> Database
 select = undefined
 
 insert :: Database -> Table -> [FieldValue] -> Database
