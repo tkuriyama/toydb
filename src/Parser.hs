@@ -1,20 +1,20 @@
 module Parser where
 
-import qualified Lexer as L
 import Syntax
+import qualified Lexer as L
 
 import qualified Data.Text as T
 
-import Text.Parsec (many, ParseError, parse, (<|>))
+import Text.Parsec (many, ParseError, parse, (<|>), option)
 import qualified Text.Parsec.Expr as Ex
 import Text.Parsec.String (Parser)
 import qualified Text.Parsec.Token as Tok
 
 -- Create
--- Create MyTable [(False, MyFieldName, Bool), (True, MyPrimaryFieldname, Int)]
+-- Create MyTable [(False, MyFieldName, Bool), (True, MyPrimaryFieldname, Int)];
 
-create :: Parser Expr
-create = do
+createP :: Parser Expr
+createP = do
   L.reserved "Create"
   name <- L.identifier
   columns <- L.brackets $ L.commaSep $ L.parens column
@@ -36,15 +36,64 @@ dropP = do
   return $ Drop name
 
 -- Select
--- Select From MyTable...
+-- Select * From MyTable;
+-- Select [IntCol1, TxtCol1] From MyTable Where [(IntCol1, >, 1), (TxtCol1, =, \"Bob\")];
 
+selectP :: Parser Expr
+selectP = do
+  L.reserved "Select"
+  fields <- fieldSelect
+  L.reserved "From"
+  name <- L.identifier
+  conds <- option [] conditions
+  L.semi
+  return $ Select fields name conds
 
+fieldSelect :: Parser FieldSelect
+fieldSelect = star <|> fieldNames
+  where fieldNames = SomeFields <$> (L.brackets $ L.commaSep fieldName)
+        star = do { L.reservedOp "*"; return AllFields }
+  
+conditions :: Parser [Condition]
+conditions = do
+  L.reserved "Where"
+  conds <- L.brackets $ L.commaSep $ L.parens condition
+  return conds
+
+condition :: Parser Condition
+condition = f <$> fieldName <*> L.comma <*> operator <*> L.comma <*> fieldValue
+  where f a _ b _ c = Condition a b c
+
+operator :: Parser ComparisonOp
+operator = eqOp <|> gtOp <|> gteOp <|> ltOp <|> lteOp
+  where eqOp = do { L.reservedOp "="; return Eq }
+        gtOp = do { L.reservedOp ">"; return Gt }
+        gteOp = do { L.reservedOp ">="; return Gte }
+        ltOp = do { L.reservedOp "<"; return Lt }
+        lteOp = do { L.reservedOp "<="; return Lte }
+        
 -- Insert
--- Insert Into MyTable ...
+-- Insert Into MyTable [1, \"Bob"\, True];
 
-
+insertP :: Parser Expr
+insertP = do
+  L.reserved "Insert"
+  L.reserved "Into"
+  name <- L.identifier
+  fvs <- L.brackets $ L.commaSep fieldValue
+  return $ Insert name fvs
+  
 -- Delete
--- Delete From MyTable...
+-- Delete From MyTable Where [(IntCol1, >, 1), (TxtCol1, =, \"Bob\")];
+
+deleteP :: Parser Expr
+deleteP = do
+  L.reserved "Delete"
+  L.reserved "From"
+  name <- L.identifier  
+  conds <- conditions
+  L.semi
+  return $ Delete name conds
 
 
 -- FIeld Name, Types and Values
@@ -73,8 +122,8 @@ intValue :: Parser FieldValue
 intValue = do
   n <- L.integer
   return $ FvInt (fromInteger n)
-textValue :: Parser FieldValue
 
+textValue :: Parser FieldValue
 textValue = do
   s <- L.string
   return $ FvText (T.pack s)

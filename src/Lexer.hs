@@ -21,7 +21,8 @@ lexer = Tok.makeTokenParser style
         "False",
         "Int",
         "Bool",
-        "Text"
+        "Text",
+        "Where"
       ]
     style =
       emptyDef
@@ -53,7 +54,6 @@ commaSep = Tok.commaSep lexer
 
 semi :: Parser String
 semi = Tok.semi lexer
-
 
 reserved :: String -> Parser ()
 reserved = Tok.reserved lexer

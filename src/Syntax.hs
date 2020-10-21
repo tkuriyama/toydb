@@ -6,9 +6,13 @@ import qualified Data.Text as T
 data Expr
   = Create Table [Column]
   | Drop Table
-  | Select Table [Condition]
+  | Select FieldSelect Table [Condition]
   | Insert Table [FieldValue]
   | Delete Table [Condition]
+  deriving (Show)
+
+data FieldSelect = SomeFields [FieldName]
+                 | AllFields
   deriving (Show)
 
 data Column = Column IsPKey FieldName FieldType
