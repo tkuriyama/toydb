@@ -105,13 +105,6 @@ pkey = f <$> boolValue
     f (FvBool True) = True
     f (FvBool False) = False
 
--- Helpers
-
--- commaParser :: Parser ()
--- commaParser = do
---   L.reservedOp ","
---   return ()
-
 -- Run Parser
 
 parseToplevel :: (Show a) => Parser a -> String -> Either ParseError a
