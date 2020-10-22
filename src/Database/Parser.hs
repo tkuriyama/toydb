@@ -57,7 +57,7 @@ selectP = do
 fieldSelect :: Parser FieldSelect
 fieldSelect = star <|> fieldNames
   where
-    fieldNames = SomeFields <$> (L.brackets $ L.commaSep fieldName)
+    fieldNames = SomeFields <$> L.brackets (L.commaSep fieldName)
     star = do
       L.reservedOp "*"
       return AllFields
@@ -101,6 +101,7 @@ insertP = do
   L.reserved "Into"
   name <- L.identifier
   fvs <- L.brackets $ L.commaSep fieldValue
+  L.semi
   return $ Insert name fvs
 
 -- Delete
@@ -115,12 +116,12 @@ deleteP = do
   L.semi
   return $ Delete name conds
 
--- FIeld Name, Types and Values
+-- Field Name, Types and Values
 
 fieldName :: Parser FieldName
 fieldName = do
   n <- L.identifier
-  return $ n
+  return n
 
 fieldValue :: Parser FieldValue
 fieldValue = boolValue <|> intValue <|> textValue
@@ -153,17 +154,17 @@ fieldType = boolType <|> intType <|> textType
 boolType :: Parser FieldType
 boolType = do
   L.reserved "Bool"
-  return $ FtBool
+  return FtBool
 
 intType :: Parser FieldType
 intType = do
   L.reserved "Int"
-  return $ FtInt
+  return FtInt
 
 textType :: Parser FieldType
 textType = do
   L.reserved "Text"
-  return $ FtText
+  return FtText
 
 -- Other Primitives
 
