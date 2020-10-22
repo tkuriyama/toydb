@@ -58,7 +58,6 @@ test-suite database-tests
       Database.BPlusTreeSpec
       Database.SerializeSpec
       Database.ParserSpec
-      Database.LexerSpec
   hs-source-dirs:
       test
   ghc-options:
@@ -68,4 +67,5 @@ test-suite database-tests
     , hspec
     , hspec-discover
     , toydb >=0.1.0.0
+    , parsec
   default-language: Haskell2010

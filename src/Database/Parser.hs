@@ -1,11 +1,15 @@
 module Database.Parser where
 
-import Database.Syntax
-import qualified Database.Lexer as L
-
 import qualified Data.Text as T
-
-import Text.Parsec (many, ParseError, parse, (<|>), option)
+import qualified Database.Lexer as L
+import Database.Syntax
+import Text.Parsec
+  ( ParseError,
+    many,
+    option,
+    parse,
+    (<|>),
+  )
 import qualified Text.Parsec.Expr as Ex
 import Text.Parsec.String (Parser)
 import qualified Text.Parsec.Token as Tok
@@ -23,7 +27,8 @@ createP = do
 
 column :: Parser Column
 column = f <$> pkey <*> L.comma <*> fieldName <*> L.comma <*> fieldType
-  where f a _ b _ c = Column a b c
+  where
+    f a _ b _ c = Column a b c
 
 -- Drop
 -- Drop MyTable
@@ -51,9 +56,12 @@ selectP = do
 
 fieldSelect :: Parser FieldSelect
 fieldSelect = star <|> fieldNames
-  where fieldNames = SomeFields <$> (L.brackets $ L.commaSep fieldName)
-        star = do { L.reservedOp "*"; return AllFields }
-  
+  where
+    fieldNames = SomeFields <$> (L.brackets $ L.commaSep fieldName)
+    star = do
+      L.reservedOp "*"
+      return AllFields
+
 conditions :: Parser [Condition]
 conditions = do
   L.reserved "Where"
@@ -62,16 +70,28 @@ conditions = do
 
 condition :: Parser Condition
 condition = f <$> fieldName <*> L.comma <*> operator <*> L.comma <*> fieldValue
-  where f a _ b _ c = Condition a b c
+  where
+    f a _ b _ c = Condition a b c
 
 operator :: Parser ComparisonOp
 operator = eqOp <|> gtOp <|> gteOp <|> ltOp <|> lteOp
-  where eqOp = do { L.reservedOp "="; return Eq }
-        gtOp = do { L.reservedOp ">"; return Gt }
-        gteOp = do { L.reservedOp ">="; return Gte }
-        ltOp = do { L.reservedOp "<"; return Lt }
-        lteOp = do { L.reservedOp "<="; return Lte }
-        
+  where
+    eqOp = do
+      L.reservedOp "="
+      return Eq
+    gtOp = do
+      L.reservedOp ">"
+      return Gt
+    gteOp = do
+      L.reservedOp ">="
+      return Gte
+    ltOp = do
+      L.reservedOp "<"
+      return Lt
+    lteOp = do
+      L.reservedOp "<="
+      return Lte
+
 -- Insert
 -- Insert Into MyTable [1, \"Bob"\, True];
 
@@ -82,7 +102,7 @@ insertP = do
   name <- L.identifier
   fvs <- L.brackets $ L.commaSep fieldValue
   return $ Insert name fvs
-  
+
 -- Delete
 -- Delete From MyTable Where [(IntCol1, >, 1), (TxtCol1, =, \"Bob\")];
 
@@ -90,11 +110,10 @@ deleteP :: Parser Expr
 deleteP = do
   L.reserved "Delete"
   L.reserved "From"
-  name <- L.identifier  
+  name <- L.identifier
   conds <- conditions
   L.semi
   return $ Delete name conds
-
 
 -- FIeld Name, Types and Values
 
@@ -108,7 +127,7 @@ fieldValue = boolValue <|> intValue <|> textValue
 
 boolValue :: Parser FieldValue
 boolValue = boolTrue <|> boolFalse
-  where 
+  where
     boolTrue :: Parser FieldValue
     boolTrue = do
       L.reserved "True"
@@ -146,7 +165,7 @@ textType = do
   L.reserved "Text"
   return $ FtText
 
--- Other Primitives 
+-- Other Primitives
 
 pkey :: Parser IsPKey
 pkey = f <$> boolValue
@@ -156,12 +175,9 @@ pkey = f <$> boolValue
 
 -- Run Parser
 
-parseToplevel :: (Show a) => Parser a -> String -> Either ParseError a
-parseToplevel p s = parse p "<stdin>" s
-
 process :: (Show a) => Parser a -> String -> IO ()
 process p line = do
-  let res = parseToplevel p line
+  let res = parse p "" line
   case res of
     Left err -> print err
     Right s -> print s

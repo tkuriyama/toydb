@@ -9,38 +9,36 @@ data Expr
   | Select FieldSelect Table [Condition]
   | Insert Table [FieldValue]
   | Delete Table [Condition]
-  deriving (Show)
+  deriving (Show, Eq)
 
-data FieldSelect = SomeFields [FieldName]
-                 | AllFields
-  deriving (Show)
+data FieldSelect
+  = SomeFields [FieldName]
+  | AllFields
+  deriving (Show, Eq)
 
 data Column = Column IsPKey FieldName FieldType
-  deriving (Show)
+  deriving (Show, Eq)
 
 type IsPKey = Bool
 
 type Table = String
 
 data Condition = Condition FieldName ComparisonOp FieldValue
-  deriving (Show)
+  deriving (Show, Eq)
 
 type FieldName = String
 
 data ComparisonOp = Eq | Gt | Gte | Lt | Lte
-  deriving (Show)
+  deriving (Show, Eq)
 
 data FieldValue
   = FvInt Integer
   | FvText T.Text
   | FvBool Bool
-  deriving (Show)
+  deriving (Show, Eq)
 
 data FieldType
   = FtInt
   | FtText
   | FtBool
-  deriving (Show)
-
-
-
+  deriving (Show, Eq)
