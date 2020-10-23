@@ -1,12 +1,25 @@
-module BPTree where
+--module BPTreeModified where
+
+-- TO DO:
+-- Implement deletion methods
+-- Change storage of Leaf nodes into a hashmap also for ease of access
+-- Massively clean up and refactor - this is all a mess currently
 
 import qualified Data.List as L
+import qualified Data.Map as M
 
 type Keys k = [k]
 type Values v = [v]
-type Kids k v = [BPTree k v]
+type Ptr = Int
+type TreePtr k = (Ptr, (k, k)) -- indices for nested hash: height, key interval.
 
--- A B+ Tree structure. Int m controls the branching factor. Nodes are either:
+-- A B+ Tree structure. 
+
+-- Every node has two ints: 
+-- m controls the branching factor
+-- h is the height (root is at height 0) 
+
+-- Nodes are either:
 --
 -- Empty
 --
@@ -15,78 +28,251 @@ type Kids k v = [BPTree k v]
 --
 -- Internal node with keys, children, and a parent pointer
 -- Invariant m-1 <= #keys = (#children)-1 <= 2*m-1
+--
+-- Also have a nested hashmap containing these nodes
+-- Outer keys = height (root is 0)
+-- Inner keys = key intervals
 
-data BPTree k v = Nil Int 
-                 | Leaf Int (Keys k) (Values v) (Maybe (BPTree k v)) 
-                 | Node Int (Keys k) (Kids k v) (Maybe (BPTree k v))
-                 deriving Show
+data Node k v = Nil Int
+                | Leaf Int Int (Keys k) (Values v) (Maybe (TreePtr k))
+                | Internal Int Int (Keys k) [TreePtr k] (Maybe (TreePtr k))
+                deriving Show
+
+type HeightMap k v = (M.Map Ptr (M.Map (k,k) (Node k v)))
+
+data BPTree k v = BPTree {root :: Node k v, heightmap :: HeightMap k v}
+                  deriving Show
 
 -- Implementing basic algorithms following the outline of http://www.cburch.com/cs/340/reading/btree/index.html
+
+-- GENERAL HELPERS/ACCESSORS
+
+-- Restores root component to point to root after having moved through the tree elsewhere
+-- Will cause error on empty tree
+recoverRoot :: (Ord k, Eq k) => BPTree k v -> Node k v
+recoverRoot bt = (M.elems (hm M.! 0)) !! 0
+  where hm = heightmap bt
+
+-- Used for going from key index to ptr index in an Internal node  
+shiftIdx :: Maybe Int -> Int
+shiftIdx =  maybe 0 succ
+
+-- Extracts height parameter
+getHeight :: Node k v -> Ptr
+getHeight (Nil _) = 0
+getHeight (Leaf h _ _ _ _) = h
+getHeight (Internal h _ _ _ _) = h
+
+-- Extracts list of keys
+getKeys :: (Ord k, Eq k) => Node k v -> Keys k
+getKeys (Nil _) = error "No keys"
+getKeys (Leaf _ _ ks _ _) = ks
+getKeys (Internal _ _ ks _ _) = ks
+
+-- Extracts interval of keys represented in this node 
+getKeyIntvl :: (Ord k, Eq k) => Node k v -> (k, k)
+getKeyIntvl (Nil _) = error "No keys"
+getKeyIntvl (Leaf _ _ ks _ _) = (minimum ks, maximum ks)
+getKeyIntvl (Internal _ _ ks _ _) = (minimum ks, maximum ks)
+
+-- Extracts parent pointer
+getParent :: Node k v -> Maybe (TreePtr k)
+getParent (Nil _) = Nothing
+getParent (Leaf _ _ _ _ par) = par
+getParent (Internal _ _ _ _ par) = par
+
+-- Node from HeightMap and TreePtr
+getNodeMap :: (Ord k, Eq k) => HeightMap k v -> TreePtr k -> Node k v
+getNodeMap hm tptr = (hm M.! (fst tptr)) M.! (snd tptr)
+
+-- Node from BPTree and TreePtr
+getNode :: (Ord k, Eq k) => BPTree k v -> TreePtr k -> Node k v
+getNode = getNodeMap . heightmap
+
+-- shifts node height parameter (and heights in ptrs if appropriate)
+nodeHeightShift :: Int -> Node k v -> Node k v
+nodeHeightShift shift node = case node of
+                               n@(Nil m) -> n -- never used
+                               (Internal h m ks ts par) -> Internal (h+shift) m ks (map shiftPtr ts) (fmap shiftPtr par)
+                               (Leaf h m ks vs par) -> Leaf (h+shift) m ks vs (fmap shiftPtr par)
+                             where shiftPtr (i,ki) = (i+shift, ki)
+                             
+-- Increments all node heights and height keys in hash map, used when height of tree changes due to root spliting or merging
+mapHeightShift:: Int -> HeightMap k v -> HeightMap k v
+mapHeightShift shift = (M.map (M.map (nodeHeightShift shift))) . (M.mapKeysMonotonic (+shift))
+
+-- Peel off a Just wrapper
+fromJust :: Maybe a -> a
+fromJust Nothing = error "Nothing"
+fromJust (Just a) = a
 
 -- LOOKUP FUNCTIONS
 
 -- Given key, descend to the leaf node that could contain it
-search :: (Ord k, Eq k) => BPTree k v -> k -> BPTree k v
-search t@(Nil _) _ = error "Searching empty tree" -- Don't do this
-search l@(Leaf _ _ _ _) _ = l
-search (Node _ ks ts _) x = search child x
-  where idx = L.findIndex (< x) ks
-        shiftIdx mi = case mi of Nothing -> 0
-                                 Just i -> i+1
-        child = ts !! (shiftIdx idx)
+search :: (Ord k, Eq k) => BPTree k v -> k -> Node k v
+search bt x = case node of
+                (Nil _) -> error "Searching empty tree" -- Don't do this
+                l@(Leaf _ _ _ _ _) -> l
+                n@(Internal _ _ ks ts _) -> let hm = heightmap bt
+                                                idx = L.findIndex (<= x) ks
+                                                cptr = ts !! (shiftIdx idx)
+                                                child = getNodeMap hm cptr
+                                            in search (BPTree child hm) x
+           where node = root bt
 
 -- Given key, look up the associated value
 locate :: (Ord k, Eq k) => BPTree k v -> k -> Maybe v
 locate t x = (vals !!) <$> idx
-  where (Leaf _ keys vals _) = search t x
+  where (Leaf _ _ keys vals _) = search t x
         idx = L.elemIndex x keys
 
 -- INSERTION FUNCTIONS
 
--- Inserts key-value pair, may upset the invariant.
+-- Inserts key-value pair into tree and rebalances to maintain invariant
 insert :: (Ord k, Eq k) => BPTree k v -> k -> v -> BPTree k v
-insert (Nil m) x y = Leaf m [x] [y] Nothing
-insert (Node m ks ts par) x y = Node m ks (ls ++ [insert r x y] ++ rs) par
-  where idx = L.findIndex (< x) ks 
-        shiftIdx mi = case mi of Nothing -> 0
-                                 Just i -> i+1
-        splitpt = shiftIdx idx
-        (ls,r:rs) = splitAt splitpt ts
-insert (Leaf m keys vals par) x y = let (ks,vs) = intoAssoc x y (keys,vals) in Leaf m ks vs par
+insert bt x y = fixBranchingPlus $ insertImproper bt x y
 
--- Does the work of splitting nodes/moving up keys to restore invariant. After (insert t x y), call this on (search t x)  
-fixBranchingPlus :: (Ord k, Eq k) => BPTree k v -> k -> BPTree k v
-fixBranchingPlus t@(Nil _) _ = t
-fixBranchingPlus l@(Leaf m ks vs par) x
-  | (length ks) <= (2*m-1) = maybe l (`fixBranchingPlus` x) par
-  | otherwise = fixBranchingPlus (place p x (split l)) x --split this node, (re)place altered kids & key in parent, call fixBranching there
-  where p = maybe (Nil m) id par
-fixBranchingPlus n@(Node m ks ts par) x
-  | (length ts) <= (2*m-1) = maybe n (`fixBranchingPlus` x) par
-  | otherwise = fixBranchingPlus (place p x (split n)) x --split this node, (re)place altered kids & key in parent, call fixBranching there
-  where p = maybe (Nil m) id par
+-- Inserts key-value pair into correct leaf
+-- erases (reference to) child pointers as it descends (to be fixed on way up)
+-- may upset the invariant (fixed on way up) 
+-- in the output, the 'root' of of the tree remains at insertion leaf
+insertImproper :: (Ord k, Eq k) => BPTree k v -> k -> v -> BPTree k v
+insertImproper bt x y = case node of
+                  -- Empty node: create singleton root leaf node
+                  (Nil m) -> let l = Leaf 0 m [x] [y] Nothing
+                             in BPTree l (M.singleton 0 (M.singleton (x,x) l))
+                  -- Internal node: delete child reference and go down
+                  (Internal h m ks ts par) -> let idx = L.findIndex (<= x) ks 
+                                                  splitpt = shiftIdx idx
+                                                  (ls,r:rs) = splitAt splitpt ts
+                                                  ts' = ls ++ rs
+                                                  n = Internal h m ks ts' par
+                                                  f  = M.adjust (const n) ki
+                                                  hm' = M.adjust f h hm 
+                                              in insertImproper (BPTree (getNode bt r) hm') x y
+                  -- Leaf node: insert into lists, update hm with new version of this leaf
+                  (Leaf h m ks vs par) -> let lk' = min lk x
+                                              rk' = max rk x
+                                              (ks',vs') = intoAssoc x y (ks,vs)
+                                              l = Leaf h m ks' vs' par
+                                              f hmInner = M.insert (lk',rk') l (M.delete ki hmInner)
+                                              hm' = M.adjust f h hm
+                                          in BPTree l hm'
+                where node = root bt
+                      hm = heightmap bt
+                      ki@(lk, rk) = getKeyIntvl node
 
--- Split a node into two (only done when capacity exactly hits 2*m)
-split :: (Ord k, Eq k) => BPTree k v -> (BPTree k v, BPTree k v)
+-- Does the work of splitting nodes/moving up keys to restore invariant
+-- Also fixes pointers to children as it ascends, and to parents whenever there's an internal split
+fixBranchingPlus :: (Ord k, Eq k) => BPTree k v -> BPTree k v
+fixBranchingPlus bt = case node of
+                  l@(Leaf h m ks vs par)
+                    -- splitting root: empty parent, so need to make new root and adjust all heights in final answer HeightMap
+                    | h == 0 && (length ks) == 2*m -> let newroot = (Internal 0 m [x] [(1,ki0), (1,ki1)] Nothing)
+                                                          roothm = M.insert 0 (M.singleton (x,x) newroot) (mapHeightShift 1 hm')
+                                                      in BPTree newroot roothm
+                    -- unfull root: do nothing
+                    | h == 0 -> bt
+                    -- unfull proper leaf: fix parent from here then recurse up
+                    | (length ks) <= (2*m-1) -> let truepar = fromJust par
+                                                    pnode = getNodeMap hm truepar
+                                                    (phm,pnode') = placePtr hm (h,ki) pnode
+                                                in fixBranchingPlus (BPTree pnode' phm)
+                    -- full: split this node, update hm to reflect split, (re)place altered kids & key in parent, call fixBranching there
+                    | otherwise -> let truepar = fromJust par
+                                       pnode = getNodeMap hm' truepar
+                                       (phm', pnode') = placeKey hm' x pnode
+                                       (phm'', pnode'') = placePtr phm' (h, ki0) pnode'
+                                       (phm''', pnode''') = placePtr phm'' (h, ki1) pnode''
+                                   in fixBranchingPlus (BPTree pnode''' phm''')
+                    where x = ks !! m 
+                          (l0,l1) = split l
+                          ki0 = getKeyIntvl l0
+                          ki1 = getKeyIntvl l1
+                          hm' = (M.adjust ((M.insert ki1 l1) . (M.insert ki0 l0) . (M.delete ki)) h hm)
+                          
+                  -- the internal cases are all analogous to the leaf cases        
+                  n@(Internal h m ks ts par)
+                    | h == 0 && (length ts) == 2*m -> let newroot = (Internal 0 m [x] [(1,ki0), (1,ki1)] Nothing)
+                                                          roothm = M.insert 0 (M.singleton (x,x) newroot) (mapHeightShift 1 hmfold') 
+                                                      in BPTree newroot roothm
+                    | h == 0 -> bt
+                    | (length ts) <= (2*m-1) -> let truepar = fromJust par
+                                                    pnode = getNodeMap hm truepar
+                                                    (phm,pnode') = placePtr hm (h,ki) pnode
+                                                in fixBranchingPlus (BPTree pnode' phm)
+                    | otherwise -> let truepar = fromJust par
+                                       pnode = getNodeMap hmfold' truepar
+                                       (phm', pnode') = placeKey hmfold' x pnode
+                                       (phm'', pnode'') = placePtr phm' (h, ki0) pnode'
+                                       (phm''', pnode''') = placePtr phm'' (h, ki1) pnode''
+                                   in fixBranchingPlus (BPTree pnode''' phm''')
+                    where x = ks !! (m-1)
+                          (n0,n1) = split n
+                          ki0 = getKeyIntvl n0
+                          ki1 = getKeyIntvl n1
+                          ts0 = take (m-1) ts
+                          ts1 = drop m ts
+                          hm' = (M.adjust ((M.insert ki1 n1) . (M.insert ki0 n0) . (M.delete ki)) h hm)
+                          hmfold = foldr (\ptr hash -> fst (placeParent hash (h,ki0) (getNodeMap hash ptr))) hm' ts0
+                          hmfold' = foldr (\ptr hash -> fst (placeParent hash (h,ki1) (getNodeMap hash ptr))) hmfold ts1
+                where node = root bt
+                      hm = heightmap bt
+                      ki = getKeyIntvl node
+                      h = getHeight node
+                      par = getParent node
+          
+-- Split a node into two (only done when capacity exactly hits 2*m), also if root is split put in ptr to new root
+split :: (Ord k, Eq k) => Node k v -> (Node k v, Node k v)
 split (Nil m) = error "Splitting empty tree"
-split (Leaf m ks vs par) = ((Leaf m (take m ks) (take m vs) p), (Leaf m (drop m ks) (drop m vs) p))
-  where p = Just (maybe (Nil m) id par)
-split (Node m ks ts par) = ((Node m (take (m-1) ks) (take (m-1) ts) p), (Node m (drop m ks) (drop m ts) p))
-  where p = Just (maybe (Nil m) id par)
+split (Leaf h m ks vs par) = ((Leaf h m (take m ks) (take m vs) p), (Leaf h m (drop m ks) (drop m vs) p))
+  where x = ks !! m
+        p = Just (maybe (-1,(x,x)) id par) -- height -1 for future shift purposes
+split (Internal h m ks ts par) = ((Internal h m (take (m-1) ks) (take (m-1) ts) par), (Internal h m (drop m ks) (drop m ts) par))
+  where x = ks !! (m-1)
+        p = Just (maybe (-1,(x,x)) id par)
 
--- Places a new key and tree pair into a node
-place :: (Ord k, Eq k) => BPTree k v -> k -> (BPTree k v, BPTree k v) -> BPTree k v
-place (Nil m) x (t0, t1) = Node m [x] [t0, t1] Nothing
-place (Leaf _ _ _ _) _ _ = error "Placing into leaf"
-place (Node m ks ts par) x (t0, t1) = Node m (L.insert x ks) (ls ++ [t0, t1] ++ rs) par
-  where idx = L.findIndex (< x) ks 
-        shiftIdx mi = case mi of Nothing -> 0
-                                 Just i -> i+1
-        splitpt = shiftIdx idx
-        (ls,r:rs) = splitAt splitpt ts
+-- Places a new key into a node and update HeightMap accordingly
+placeKey :: (Ord k, Eq k) => HeightMap k v -> k -> Node k v -> (HeightMap k v, Node k v)
+placeKey hm x (Nil m) = let n = Internal 0 m [x] [] Nothing 
+                        in (M.insert 0 (M.singleton (x,x) n) hm, n)
+placeKey _ _ (Leaf _ _ _ _ _) = error "Placing into leaf" -- this should never come up the way insertion works right now but it can't hurt to write it
+placeKey hm x n@(Internal h m ks ts par) = let n' = Internal h m (L.insert x ks) ts par
+                                               ki = getKeyIntvl n
+                                               ki' = getKeyIntvl n'
+                                               hm' = M.adjust ((M.insert ki' n') . (M.delete ki)) h hm
+                                           in (hm',n')
+                                        
+-- Parent-to-child pointer updating helper function - intended to add back pointer to child updated in insertion process
+-- This change is crystallized by storing it in the HeightMap
+placePtr :: (Ord k, Eq k) => HeightMap k v -> TreePtr k -> Node k v -> (HeightMap k v, Node k v)
+placePtr hm ptr node = case node of
+                (Nil _) -> error "Parent is empty"
+                (Leaf _ _ _ _ _) -> error "Parent is leaf" -- shouldn't happen, but could be implemented
+                (Internal h m ks ts par) -> let x = fst $ snd $ ptr
+                                                idx = L.findIndex (<= x) ks 
+                                                splitpt = shiftIdx idx
+                                                (ls,rs) = splitAt splitpt ts
+                                                ts' = ls ++ [ptr] ++ rs
+                                                n' = Internal h m ks ts' par
+                                                ki = getKeyIntvl node
+                                                hm' = M.adjust (M.insert ki n') h hm -- overwrites old copy of node
+                                            in (hm',n')
+-- Changes parent pointers (for fixing references after splits or merges)                                            
+placeParent :: (Ord k, Eq k) => HeightMap k v -> TreePtr k -> Node k v -> (HeightMap k v, Node k v)
+placeParent _ _ (Nil m) = error "Parent of empty node"
+placeParent hm ptr l@(Leaf h m ks vs par) = let l' = Leaf h m ks vs (Just ptr)
+                                                ki = getKeyIntvl l
+                                                hm' = M.adjust (M.insert ki l') h hm
+                                            in (hm', l')
+placeParent hm ptr n@(Internal h m ks ts par) = let n' = Internal h m ks ts (Just ptr)
+                                                    ki = getKeyIntvl n
+                                                    hm' = M.adjust (M.insert ki n') h hm
+                                                in (hm',n')
         
 -- Puts key + value into proper positions in a pair of lists (used for inserting into leaf node)
-intoAssoc :: (Ord k, Eq k) => k -> v -> ([k],[v]) -> ([k],[v])
+-- The need for this function would be obviated by using hashmaps in the leaves (see ToDo)
+intoAssoc :: (Ord k, Eq k) => k -> v -> (Keys k, Values v) -> (Keys k, Values v)
 intoAssoc x y ([],vs) = ([x],y:vs) -- should only occur with vs = []
 intoAssoc x y (keys@(k:ks),vals@(v:vs))
   | x < k = (x:keys,y:vals)
@@ -94,7 +280,7 @@ intoAssoc x y (keys@(k:ks),vals@(v:vs))
   | otherwise = tupleCons (k,v) (intoAssoc x y (ks,vs))
     where tupleCons (a,b) (as,bs) = (a:as, b:bs)
 
--- DELETION FUNCTIONS (INCOMPLETE)
+-- DELETION FUNCTIONS (Incomplete, a random mess of variations from older forms)
 {-
 -- Deletes key (and associated value), may upset invariant 
 delete :: (Ord k, Eq k) => BPTree k v -> k -> BPTree k v
@@ -153,17 +339,17 @@ outOfAssoc x pair@(keys@(k:ks),vals@(v:vs))
 -- TESTING FUNCTIONS
 
 empty :: BPTree Int Int
-empty = Nil 2
+empty = BPTree (Nil 2) M.empty
 
 makeTree :: Int -> BPTree Int Int
 makeTree n = fromList (zip [1..n] [1..n]) empty
 
 fromList :: (Ord k, Eq k) => [(k,v)] -> BPTree k v -> BPTree k v  
 fromList kvs t =
-   foldr (\(x,y) acc -> (`fixBranchingPlus` x) $ (`search` x) $ insert acc x y) t kvs
+   foldr (\(x,y) acc -> insert acc x y) t kvs
 
 t10 :: BPTree Int Int
-t10 = makeTree 10
+t10 = makeTree 7
 
 -- TESTS
 main :: IO ()
