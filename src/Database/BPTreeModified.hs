@@ -69,6 +69,12 @@ getKeys (Nil _) = error "No keys"
 getKeys (Leaf _ _ ks _ _) = ks
 getKeys (Internal _ _ ks _ _) = ks
 
+-- Extracts kids (only from internal)
+getKids :: (Ord k, Eq k) => Node k v -> [TreePtr k]
+getKids (Nil _) = error "No kids"
+getKids (Leaf _ _ _ _ _) = error "No kids"
+getKids (Internal _ _ _ ts _) = ts
+
 -- Extracts interval of keys represented in this node 
 getKeyIntvl :: (Ord k, Eq k) => Node k v -> (k, k)
 getKeyIntvl (Nil _) = error "No keys"
@@ -204,7 +210,10 @@ fixBranchingPlus bt = case node of
                     | otherwise -> let truepar = fromJust par
                                        pnode = getNodeMap hmfold' truepar
                                        (phm', pnode') = placeKey hmfold' x pnode
-                                       (phm'', pnode'') = placePtr phm' (h, ki0) pnode'
+                                       ki' = getKeyIntvl pnode'
+                                       ts' = getKids pnode'
+                                       phmfold = foldr (\ptr hash -> fst (placeParent hash (h-1,ki') (getNodeMap hash ptr))) phm' ts'
+                                       (phm'', pnode'') = placePtr phmfold (h, ki0) pnode'
                                        (phm''', pnode''') = placePtr phm'' (h, ki1) pnode''
                                    in fixBranchingPlus (BPTree pnode''' phm''')
                     where x = ks !! (m-1)
@@ -227,10 +236,16 @@ split :: (Ord k, Eq k) => Node k v -> (Node k v, Node k v)
 split (Nil m) = error "Splitting empty tree"
 split (Leaf h m ks vs par) = ((Leaf h m (take m ks) (take m vs) p), (Leaf h m (drop m ks) (drop m vs) p))
   where x = ks !! m
-        p = Just (maybe (-1,(x,x)) id par) -- height -1 for future shift purposes
+        kiAlter (h,ki) = (h,keyIntvlAlter x ki) 
+        p = Just (maybe (-1,(x,x)) kiAlter par) -- height -1 for future shift purposes
 split (Internal h m ks ts par) = ((Internal h m (take (m-1) ks) (take (m-1) ts) par), (Internal h m (drop m ks) (drop m ts) par))
   where x = ks !! (m-1)
-        p = Just (maybe (-1,(x,x)) id par)
+        kiAlter (h,ki) = (h,keyIntvlAlter x ki)
+        p = Just (maybe (-1,(x,x)) kiAlter par)
+
+-- Changes key interval signature when a new key is added     
+keyIntvlAlter :: (Ord k, Eq k) => k -> (k,k) -> (k,k)
+keyIntvlAlter a (b,c) = (min a b, max a c)
 
 -- Places a new key into a node and update HeightMap accordingly
 placeKey :: (Ord k, Eq k) => HeightMap k v -> k -> Node k v -> (HeightMap k v, Node k v)
@@ -344,15 +359,22 @@ empty = BPTree (Nil 2) M.empty
 makeTree :: Int -> BPTree Int Int
 makeTree n = fromList (zip [1..n] [1..n]) empty
 
+makeTree' :: Int -> BPTree Int Int
+makeTree' n = fromList (zip [n,(n-1)..1] [n,(n-1)..1]) empty
+
 fromList :: (Ord k, Eq k) => [(k,v)] -> BPTree k v -> BPTree k v  
 fromList kvs t =
    foldr (\(x,y) acc -> insert acc x y) t kvs
 
-t10 :: BPTree Int Int
-t10 = makeTree 7
+t :: BPTree Int Int
+t = makeTree 6
+
+t' :: BPTree Int Int
+t' = makeTree' 6
+
 
 -- TESTS
 main :: IO ()
-main = print t10
+main = print t
 
 --print ((`fixBranchingMinus` x) $ (`search` x) $ delete t10 2)
