@@ -188,7 +188,10 @@ fixBranchingPlus bt = case node of
                     | otherwise -> let truepar = fromJust par
                                        pnode = getNodeMap hm' truepar
                                        (phm', pnode') = placeKey hm' x pnode
-                                       (phm'', pnode'') = placePtr phm' (h, ki0) pnode'
+                                       ki' = getKeyIntvl pnode'
+                                       ts' = getKids pnode'
+                                       phmfold = foldr (\ptr hash -> fst (placeParent hash (h-1,ki') (getNodeMap hash ptr))) phm' ts'
+                                       (phm'', pnode'') = placePtr phmfold (h, ki0) pnode'
                                        (phm''', pnode''') = placePtr phm'' (h, ki1) pnode''
                                    in fixBranchingPlus (BPTree pnode''' phm''')
                     where x = ks !! m 
