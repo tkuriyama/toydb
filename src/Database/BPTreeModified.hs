@@ -223,7 +223,7 @@ fixBranchingPlus bt = case node of
                           (n0,n1) = split n
                           ki0 = getKeyIntvl n0
                           ki1 = getKeyIntvl n1
-                          ts0 = take (m-1) ts
+                          ts0 = take m ts
                           ts1 = drop m ts
                           hm' = (M.adjust ((M.insert ki1 n1) . (M.insert ki0 n0) . (M.delete ki)) h hm)
                           hmfold = foldr (\ptr hash -> fst (placeParent hash (h,ki0) (getNodeMap hash ptr))) hm' ts0
@@ -241,7 +241,7 @@ split (Leaf h m ks vs par) = ((Leaf h m (take m ks) (take m vs) p), (Leaf h m (d
   where x = ks !! m
         kiAlter (h,ki) = (h,keyIntvlAlter x ki) 
         p = Just (maybe (-1,(x,x)) kiAlter par) -- height -1 for future shift purposes
-split (Internal h m ks ts par) = ((Internal h m (take (m-1) ks) (take (m-1) ts) par), (Internal h m (drop m ks) (drop m ts) par))
+split (Internal h m ks ts par) = ((Internal h m (take (m-1) ks) (take m ts) p), (Internal h m (drop m ks) (drop m ts) p))
   where x = ks !! (m-1)
         kiAlter (h,ki) = (h,keyIntvlAlter x ki)
         p = Just (maybe (-1,(x,x)) kiAlter par)
@@ -370,7 +370,7 @@ fromList kvs t =
    foldr (\(x,y) acc -> insert acc x y) t kvs
 
 t :: BPTree Int Int
-t = makeTree 6
+t = makeTree 10
 
 t' :: BPTree Int Int
 t' = makeTree' 6
