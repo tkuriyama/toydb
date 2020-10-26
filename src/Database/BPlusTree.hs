@@ -23,14 +23,16 @@ import qualified Data.Map as M
 -- Invariant m-1 <= #keys = (#children)-1 <= 2*m-1
 
 
-data BPTree k v = BPTree {root :: Node k v, heightmap :: HeightMap k v, branchfactor :: BranchFactor}
-                  deriving Show
+data BPTree k v = BPTree {root :: Node k v
+                         , heightmap :: HeightMap k v
+                         , branchfactor :: BranchFactor}
+                  deriving (Show, Eq)
 
 data Node k v =
   Nil
   | Leaf Height (Keys k) (Values v) (Maybe (TreePtr k))
   | Internal Height (Keys k) [TreePtr k] (Maybe (TreePtr k))
-  deriving Show
+  deriving (Show, Eq)
 
 type HeightMap k v = (M.Map Height (M.Map (KeyInterval k) (Node k v)))
 
@@ -447,26 +449,26 @@ outOfAssoc x pair@(keys@(k:ks),vals@(v:vs))
   
 -- Helpers
 
-empty :: BPTree Int Int
-empty = BPTree Nil M.empty 2
+empty :: Int -> BPTree Int Int
+empty = BPTree Nil M.empty
 
-emptyS :: BPTree Int String
-emptyS = BPTree Nil M.empty 2
+emptyS :: Int -> BPTree Int String
+emptyS = BPTree Nil M.empty
 
 
-makeTree :: Int -> BPTree Int Int
-makeTree n = fromList (zip [1..n] [1..]) empty
+makeTree :: Int -> Int -> BPTree Int Int
+makeTree n b = fromList (zip [1..n] [1..]) (empty b)
 
-makeTree' :: Int -> BPTree Int Int
-makeTree' n = fromList (zip [n,(n-1)..1] [n,(n-1)..1]) empty
+makeTree' :: Int -> Int -> BPTree Int Int
+makeTree' n b = fromList (zip [n,(n-1)..1] [n,(n-1)..1]) (empty b)
 
 
 fromList :: (Ord k, Eq k) => [(k,v)] -> BPTree k v -> BPTree k v  
 fromList kvs t =
    foldr (\(x,y) acc -> insert acc x y) t kvs
    
-t :: BPTree Int Int
-t = makeTree 10
+-- t :: BPTree Int Int
+-- t = makeTree 10
 
 -- TESTS
 --main :: IO ()
