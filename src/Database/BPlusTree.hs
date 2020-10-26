@@ -1,4 +1,4 @@
---module BPTreeModified where
+module Database.BPlusTree where
 
 -- TO DO:
 -- Implement deletion methods
@@ -7,11 +7,6 @@
 
 import qualified Data.List as L
 import qualified Data.Map as M
-
-type Keys k = [k]
-type Values v = [v]
-type Ptr = Int
-type TreePtr k = (Ptr, (k, k)) -- indices for nested hash: height, key interval.
 
 -- A B+ Tree structure. 
 
@@ -33,15 +28,26 @@ type TreePtr k = (Ptr, (k, k)) -- indices for nested hash: height, key interval.
 -- Outer keys = height (root is 0)
 -- Inner keys = key intervals
 
-data Node k v = Nil Int
-                | Leaf Int Int (Keys k) (Values v) (Maybe (TreePtr k))
-                | Internal Int Int (Keys k) [TreePtr k] (Maybe (TreePtr k))
-                deriving Show
-
-type HeightMap k v = (M.Map Ptr (M.Map (k,k) (Node k v)))
-
 data BPTree k v = BPTree {root :: Node k v, heightmap :: HeightMap k v}
                   deriving Show
+
+data Node k v =
+  Nil BranchFactor
+  | Leaf Height BranchFactor (Keys k) (Values v) (Maybe (TreePtr k))
+  | Internal Height BranchFactor (Keys k) [TreePtr k] (Maybe (TreePtr k))
+  deriving Show
+
+type HeightMap k v = (M.Map Height (M.Map (KeyInterval k) (Node k v)))
+
+type Height = Int
+type BranchFactor = Int
+
+type Keys k = [k]
+type Values v = [v]
+type KeyInterval k = (k, k)
+
+type TreePtr k = (Height, KeyInterval k) -- indices for nested hash: height, key interval.
+
 
 -- Implementing basic algorithms following the outline of http://www.cburch.com/cs/340/reading/btree/index.html
 
@@ -58,7 +64,7 @@ shiftIdx :: Maybe Int -> Int
 shiftIdx =  maybe 0 succ
 
 -- Extracts height parameter
-getHeight :: Node k v -> Ptr
+getHeight :: Node k v -> Height
 getHeight (Nil _) = 0
 getHeight (Leaf h _ _ _ _) = h
 getHeight (Internal h _ _ _ _) = h
@@ -354,30 +360,28 @@ outOfAssoc x pair@(keys@(k:ks),vals@(v:vs))
   | otherwise = (<$>) $ (:) $ (k,v) (outOfAssoc x (ks,vs))
 -}
   
--- TESTING FUNCTIONS
+-- Helpers
 
 empty :: BPTree Int Int
 empty = BPTree (Nil 2) M.empty
 
+emptyS :: BPTree Int String
+emptyS = BPTree (Nil 2) M.empty
+
+
 makeTree :: Int -> BPTree Int Int
-makeTree n = fromList (zip [1..n] [1..n]) empty
+makeTree n = fromList (zip [1..n] [1..]) empty
 
 makeTree' :: Int -> BPTree Int Int
 makeTree' n = fromList (zip [n,(n-1)..1] [n,(n-1)..1]) empty
+
 
 fromList :: (Ord k, Eq k) => [(k,v)] -> BPTree k v -> BPTree k v  
 fromList kvs t =
    foldr (\(x,y) acc -> insert acc x y) t kvs
 
-t :: BPTree Int Int
-t = makeTree 10
-
-t' :: BPTree Int Int
-t' = makeTree' 6
-
-
 -- TESTS
-main :: IO ()
-main = print t
+-- main :: IO ()
+-- main = print t
 
 --print ((`fixBranchingMinus` x) $ (`search` x) $ delete t10 2)
