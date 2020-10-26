@@ -8,6 +8,7 @@ import Text.Parsec
     many,
     option,
     parse,
+    try,
     (<|>),
   )
 import qualified Text.Parsec.Expr as Ex
@@ -174,11 +175,19 @@ pkey = f <$> boolValue
     f (FvBool True) = True
     f (FvBool False) = False
 
--- Run Parser
+-- Top level expression parser
 
-process :: (Show a) => Parser a -> String -> IO ()
-process p line = do
-  let res = parse p "" line
+exprP :: Parser Expr
+exprP =
+  try selectP <|> try dropP <|> try createP <|> try insertP <|> try deleteP
+
+parseExpr :: String -> Either ParseError Expr
+parseExpr = parse exprP ""
+
+-- Run Parser
+process :: String -> IO ()
+process line = do
+  let res = parse exprP "" line
   case res of
     Left err -> print err
     Right s -> print s
