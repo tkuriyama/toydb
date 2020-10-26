@@ -1,4 +1,4 @@
---module Database.BPlusTree where
+module Database.BPlusTree where
 
 -- TO DO:
 -- Implement deletion methods
