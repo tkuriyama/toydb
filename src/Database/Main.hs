@@ -1,7 +1,5 @@
 module Database.Main where
 
-import Database.Repl (repl)
-
 import Database.Syntax
 import Database.Parser
 
@@ -33,5 +31,3 @@ insert = undefined
 delete :: Database -> Table -> [Condition] -> Database
 delete = undefined      
 
-main :: IO ()
-main = repl
