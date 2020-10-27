@@ -114,7 +114,13 @@ fromJust :: Maybe a -> a
 fromJust Nothing = error "Nothing"
 fromJust (Just a) = a
 
+
 -- LOOKUP FUNCTIONS
+
+findIndex :: (Ord k, Eq k) => [k] -> k -> Int
+findIndex ks k = case L.findIndex (> k) ks of
+                   (Just i) -> i
+                   Nothing -> length ks
 
 -- Given key, descend to the leaf node that could contain it
 search :: (Ord k, Eq k) => BPTree k v -> k -> Maybe (Node k v)
@@ -124,8 +130,8 @@ search bt x =
     n@(Leaf _ ks _ _) -> if x `elem` ks then (Just n) else Nothing
     n@(Internal _ ks ts _) -> let hm = heightmap bt
                                   m = branchfactor bt
-                                  idx = L.findIndex (<= x) ks
-                                  cptr = ts !! (shiftIdx idx)
+                                  idx = findIndex ks x
+                                  cptr = ts !! idx 
                                   child = getNodeMap hm cptr
                               in search (BPTree child hm m) x
 

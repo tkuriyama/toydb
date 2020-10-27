@@ -31,7 +31,8 @@ spec = do
      it "qcheck: can't find keys not in tree" $ property $ 
        \x y -> (matchLeaf $ BPT.search (BPT.makeTree x y) (x+1)) == False
      it "qcheck: can always find keys in tree" $ property $ 
-       \x y -> (matchLeaf $ BPT.search (BPT.makeTree (x+1) y) (x+1)) == True
+       \x y -> let (x', y') = ((abs x) + 1, (abs y) + 1)
+               in (matchLeaf $ BPT.search (BPT.makeTree x' y') x') == True
        
    describe "tree height" $ do
      it  "3 nodes branching factor 2 == height 1" $
