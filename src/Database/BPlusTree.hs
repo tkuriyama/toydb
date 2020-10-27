@@ -67,7 +67,7 @@ getHeight (Internal h _ _ _) = h
 
 -- Extracts list of keys
 getKeys :: (Ord k, Eq k) => Node k v -> Keys k
-getKeys Nil = error "No keys"
+getKeys Nil = []
 getKeys (Leaf _ ks _ _) = ks
 getKeys (Internal _ ks _ _) = ks
 
@@ -117,23 +117,24 @@ fromJust (Just a) = a
 -- LOOKUP FUNCTIONS
 
 -- Given key, descend to the leaf node that could contain it
-search :: (Ord k, Eq k) => BPTree k v -> k -> Node k v
-search bt x = case node of
-                Nil -> node
-                (Leaf _ _ _ _) -> node
-                n@(Internal _ ks ts _) -> let hm = heightmap bt
-                                              m = branchfactor bt
-                                              idx = L.findIndex (<= x) ks
-                                              cptr = ts !! (shiftIdx idx)
-                                              child = getNodeMap hm cptr
-                                          in search (BPTree child hm m) x
-           where node = root bt
+search :: (Ord k, Eq k) => BPTree k v -> k -> Maybe (Node k v)
+search bt x =
+  case root bt of
+    Nil -> Nothing
+    n@(Leaf _ ks _ _) -> if x `elem` ks then (Just n) else Nothing
+    n@(Internal _ ks ts _) -> let hm = heightmap bt
+                                  m = branchfactor bt
+                                  idx = L.findIndex (<= x) ks
+                                  cptr = ts !! (shiftIdx idx)
+                                  child = getNodeMap hm cptr
+                              in search (BPTree child hm m) x
 
 -- Given key, look up the associated value
 locate :: (Ord k, Eq k) => BPTree k v -> k -> Maybe v
-locate t x = (vals !!) <$> idx
-  where (Leaf _ keys vals _) = search t x
-        idx = L.elemIndex x keys
+locate t k =
+  case search t k of
+    (Just (Leaf _ keys vals _)) -> (vals !!) <$> (L.elemIndex k keys)
+    _ -> Nothing
 
 -- INSERTION FUNCTIONS
 
@@ -455,21 +456,13 @@ empty = BPTree Nil M.empty
 emptyS :: Int -> BPTree Int String
 emptyS = BPTree Nil M.empty
 
-
 makeTree :: Int -> Int -> BPTree Int Int
 makeTree n b = fromList (zip [1..n] [1..]) (empty b)
 
 makeTree' :: Int -> Int -> BPTree Int Int
 makeTree' n b = fromList (zip [n,(n-1)..1] [n,(n-1)..1]) (empty b)
 
-
 fromList :: (Ord k, Eq k) => [(k,v)] -> BPTree k v -> BPTree k v  
 fromList kvs t =
    foldr (\(x,y) acc -> insert acc x y) t kvs
-   
--- t :: BPTree Int Int
--- t = makeTree 10
-
--- TESTS
---main :: IO ()
---main = print t
+ 

@@ -12,56 +12,34 @@ import Test.Hspec
   )
   
 import Test.Hspec.QuickCheck (prop)
-import Test.QuickCheck ((===))
+import Test.QuickCheck ((===), property)
+
+matchLeaf :: Maybe (BPT.Node k v) -> Bool
+matchLeaf (Just (BPT.Leaf _ _ _ _)) = True
+matchLeaf _ = False            
 
 spec :: Spec
 spec = do
-   describe "empty tree tests" $ do
-     it "search empty returns nil" $  
-       (BPT.search (BPT.empty 2) 1) `shouldBe` BPT.Nil
 
-   describe "Height 1 tree" $ do
+   describe "search" $ do
+     it "search empty returns nil" $  
+       (BPT.search (BPT.empty 2) 1) `shouldBe` Nothing
+     it "find key 4 in keys 1..4" $
+       (matchLeaf $ BPT.search (BPT.makeTree 4 2) 4) `shouldBe` True
+     it "don't find key 5 in keys 1..4" $
+       (matchLeaf $ BPT.search (BPT.makeTree 4 2) 5) `shouldBe` False
+     it "qcheck: can't find keys not in tree" $ property $ 
+       \x y -> (matchLeaf $ BPT.search (BPT.makeTree x y) (x+1)) == False
+     it "qcheck: can always find keys in tree" $ property $ 
+       \x y -> (matchLeaf $ BPT.search (BPT.makeTree (x+1) y) (x+1)) == True
+       
+   describe "tree height" $ do
      it  "3 nodes branching factor 2 == height 1" $
        (M.keys $ BPT.heightmap (BPT.makeTree 3 2)) `shouldBe` [0]
      it  "4 nodes branching factor 2 == height 2" $
        (M.keys $ BPT.heightmap (BPT.makeTree 4 2)) `shouldBe` [0, 1]
-       
-
--- t :: BPTree Int Int
--- t = makeTree 10
-
--- t' :: BPTree Int Int
--- t' = makeTree' 6
-
-
-
-
--- module BTreeTest where
-
--- import BTree
-
-
--- -- TEST DATA
-
-
--- -- In 'Nil m', the m determines the branching of the BTree: it is 2m - 1 
--- empty :: Tree Int
--- empty = Nil 2
-
--- makeTree :: Int -> Tree Int
--- makeTree n = fromList [1..n] empty
-
--- -- CONSTRUCT TREE FROM LIST
--- -- > fromList [1..99] (Nil 2) |> depth
--- --   5
--- fromList :: (Ord a) => [a] -> Tree a -> Tree a  
--- fromList as t =
---    foldr (\a acc -> insert acc a) t as
-
-
--- t99 :: Tree Int
--- t99 = makeTree 99
-
+   --  it "qcheck: tree height property" $ property $ 
+   --     \x y -> (M.keys $ BPT.heightmap (BPT.makeTree x y )) shouldBe` [0..] 
 
 
 -- -- BTREE TESTS
