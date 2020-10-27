@@ -1,12 +1,15 @@
-module Database.BPlusTree where
+--module Database.BPlusTree where
 
 -- TO DO:
 -- Implement deletion methods
 -- Change storage of Leaf nodes into a hashmap also for ease of access
+-- Add bulk loading method for better initialization of large trees
 -- Massively clean up and refactor - this is all a mess currently
+-- Replace the lists for keys and values with sequences? Would allow for easier manipulation, but not a big time savings for small m
 
 import qualified Data.List as L
 import qualified Data.Map as M
+import Control.Monad
 
 -- A B+ Tree structure. Consists of a node (the "current location" in the tree), heightmap storing the whole tree, and branching factor m
 -- HeightMap is a nested hashmap where outer keys = height (root is 0), inner keys = key intervals, values = nodes
@@ -23,21 +26,27 @@ import qualified Data.Map as M
 -- Invariant m-1 <= #keys = (#children)-1 <= 2*m-1
 
 
-data BPTree k v = BPTree {root :: Node k v
-                         , heightmap :: HeightMap k v
-                         , branchfactor :: BranchFactor}
-                  deriving (Show, Eq)
+data BPTree k v = BPTree {root :: Node k v, heightmap :: HeightMap k v, branchfactor :: BranchFactor}
+                  deriving Show
 
 data Node k v =
   Nil
   | Leaf Height (Keys k) (Values v) (Maybe (TreePtr k))
   | Internal Height (Keys k) [TreePtr k] (Maybe (TreePtr k))
-  deriving (Show, Eq)
+  deriving Show
 
 type HeightMap k v = (M.Map Height (M.Map (KeyInterval k) (Node k v)))
 
 type Height = Int
 type BranchFactor = Int
+
+type Direction = Bool -- for redistributing/merging after deletions. False indicates left, True indicates right
+
+leftDir :: Direction
+leftDir = False
+
+rightDir :: Direction
+rightDir = True
 
 type Keys k = [k]
 type Values v = [v]
@@ -67,7 +76,7 @@ getHeight (Internal h _ _ _) = h
 
 -- Extracts list of keys
 getKeys :: (Ord k, Eq k) => Node k v -> Keys k
-getKeys Nil = []
+getKeys Nil = error "No keys"
 getKeys (Leaf _ ks _ _) = ks
 getKeys (Internal _ ks _ _) = ks
 
@@ -78,10 +87,18 @@ getKeyIntvl (Leaf _ ks _ _) = (minimum ks, maximum ks)
 getKeyIntvl (Internal _ ks _ _) = (minimum ks, maximum ks)
 
 -- Extracts kids (only from internal)
+-- This should be changed to return a Maybe value
 getKids :: (Ord k, Eq k) => Node k v -> [TreePtr k]
 getKids Nil = error "No kids"
 getKids (Leaf _ _ _ _) = error "No kids"
 getKids (Internal _ _ ts _) = ts
+
+-- Extracts values (only from leaf)
+-- This should be changed to return a Maybe value
+getVals :: (Ord k, Eq k) => Node k v -> Values v
+getVals Nil = error "No values"
+getVals (Leaf _ _ vs _) = vs
+getVals (Internal _ _ _ _) = error "No values"
 
 -- Extracts parent pointer
 getParent :: Node k v -> Maybe (TreePtr k)
@@ -117,24 +134,23 @@ fromJust (Just a) = a
 -- LOOKUP FUNCTIONS
 
 -- Given key, descend to the leaf node that could contain it
-search :: (Ord k, Eq k) => BPTree k v -> k -> Maybe (Node k v)
-search bt x =
-  case root bt of
-    Nil -> Nothing
-    n@(Leaf _ ks _ _) -> if x `elem` ks then (Just n) else Nothing
-    n@(Internal _ ks ts _) -> let hm = heightmap bt
-                                  m = branchfactor bt
-                                  idx = L.findIndex (<= x) ks
-                                  cptr = ts !! (shiftIdx idx)
-                                  child = getNodeMap hm cptr
-                              in search (BPTree child hm m) x
+search :: (Ord k, Eq k) => BPTree k v -> k -> Node k v
+search bt x = case node of
+                Nil -> node
+                (Leaf _ _ _ _) -> node
+                n@(Internal _ ks ts _) -> let hm = heightmap bt
+                                              m = branchfactor bt
+                                              idx = L.findIndex (<= x) ks
+                                              cptr = ts !! (shiftIdx idx)
+                                              child = getNodeMap hm cptr
+                                          in search (BPTree child hm m) x
+           where node = root bt
 
 -- Given key, look up the associated value
 locate :: (Ord k, Eq k) => BPTree k v -> k -> Maybe v
-locate t k =
-  case search t k of
-    (Just (Leaf _ keys vals _)) -> (vals !!) <$> (L.elemIndex k keys)
-    _ -> Nothing
+locate t x = (vals !!) <$> idx
+  where (Leaf _ keys vals _) = search t x
+        idx = L.elemIndex x keys
 
 -- INSERTION FUNCTIONS
 
@@ -304,12 +320,15 @@ intoAssoc x y (keys@(k:ks),vals@(v:vs))
   | otherwise = tupleCons (k,v) (intoAssoc x y (ks,vs))
     where tupleCons (a,b) (as,bs) = (a:as, b:bs)
 
--- DELETION FUNCTIONS (Incomplete, a random mess of variations from older forms)
+-- DELETION FUNCTIONS (UNDER CONSTRUCTION)
+
+-- Here the previous site doesn't provide sufficient explanation, see here for further detail https://www.programiz.com/dsa/deletion-from-a-b-plus-tree
 
 -- Deletes key-value pair from (leaf of) tree
 -- erases (reference to) child pointers as it descends (to be fixed on way up)
 -- may upset the invariant (fixed on way up) 
 -- in the output, the 'root' of of the tree remains at deletion leaf
+
 deleteImproper :: (Ord k, Eq k) => BPTree k v -> k -> BPTree k v
 deleteImproper bt x = case node of
                   -- Empty node: do nothing
@@ -338,22 +357,23 @@ deleteImproper bt x = case node of
 -- Removes key + value from associated pair of lists (used for deleting into leaf node)
 -- The need for this function would be obviated by using hashmaps in the leaves (see ToDo)
 outOfAssoc :: (Ord k, Eq k) => k -> (Keys k, Values v) -> (Keys k, Values v)
+outOfAssoc _ pair@([],_) = pair
 outOfAssoc x (keys@(k:ks),vals@(v:vs))
   | x > k = (keys, vals)
   | x == k = (ks,vs)
   | otherwise = tupleCons (k,v) (outOfAssoc x (ks,vs))
     where tupleCons (a,b) (as,bs) = (a:as, b:bs)
     
--- Does the work of moving around keys/merging nodes/correcting keys in parents to restore invariants
+-- Does the work of redistributing keys/merging nodes/correcting keys in parents to restore invariants
 -- Also fixes pointers to children as it ascends, and to parents whenever there's a merge
 fixBranchingMinus :: (Ord k, Eq k) => BPTree k v -> BPTree k v
 fixBranchingMinus bt = case node of
                   l@(Leaf h ks vs par)
                     -- removing the final key from leaf root: tree is now empty
                     | h == 0 && (length ks) == 0 -> BPTree Nil M.empty m
-                    -- root still has keys: do nothing
+                    -- root and still has keys: do nothing
                     | h == 0 -> bt
-                    -- proper leaf, still full enough: fix parent from here then recurse up
+                    -- proper leaf, still enough keys: fix parent from here then recurse up
                     | (length ks) >= m -> let truepar = fromJust par
                                               pnode = getNodeMap hm truepar
                                               (phm,pnode') = placePtr hm (h,ki) pnode
@@ -361,7 +381,7 @@ fixBranchingMinus bt = case node of
                     -- underflow: first try to take keys from neighbors if they have any to spare
                     -- otherwise merge this with one of its neighbors
                     -- either way update hm to reflect changes, repair kid ptrs & keys in parent as necessary, call fixBranching there
-                    | otherwise -> undefined -- Need to write this
+                    | otherwise -> undefined  -- Need to write this
                   -- the internal cases are all analogous to the leaf cases, except that of erasing the root node       
                   n@(Internal h ks ts par)
                     -- removing the final key from internal root: the merged node one level below is the new root, heights all go down one
@@ -381,88 +401,95 @@ fixBranchingMinus bt = case node of
                       h = getHeight node
                       par = getParent node   
 
--- attempt to take a key from the neighbor to the left or right (direction determined by bool)
-getExtraKey :: (Ord k, Eq k) => Node k v -> BranchFactor -> Bool -> Maybe k
-getExtraKey node m b
-              | (length ks) == m = Nothing
-              | otherwise = if b then Just (minimum ks) else Just (maximum ks)
-            where ks = getKeys node
+-- Checks if a node has a neighbor (under the same parent) with keys to spare
+-- If so, redistributes a key and updates the HeightMap accordingly for all affected nodes (the two on this level, all kids, common parent)
+attemptRedistribute :: (Ord k, Eq k) => HeightMap k v -> BranchFactor -> Node k v -> Maybe (HeightMap k v, k)
+attemptRedistribute hm m node = case node of
+                 (Leaf h ks vs par)
+                   | par == pleft && leftExtra == Just True -> let trueNeighbor = fromJust leftNeighbor
+                                                                   nks = getKeys trueNeighbor
+                                                                   nvs = getVals trueNeighbor
+                                                                   nki@(nlk,nrk) = (head nks, last nks) 
+                                                                   v' = last nvs
+                                                                   lk' = nrk
+                                                                   nks' = init nks
+                                                                   nvs' = init nvs
+                                                                   nki' = (nlk, last nks')
+                                                                   ks' = lk':ks
+                                                                   vs' = v':vs
+                                                                   ki' = (lk',rk)
+                                                                   l = Leaf h ks' vs' par
+                                                                   nl = Leaf h nks' nvs' par
+                                                                   hm' = M.adjust ((M.insert nki' nl) . (M.insert ki' l) . (M.delete nki) . (M.delete ki)) h hm
+                                                                   truePar = getNodeMap hm' (fromJust par)
+                                                                   pks = getKeys truePar
+                                                                   breakks = span (< lk) pks
+                                                                  -- restore kid pointers? keep in mind that there already is one to old lneigh, now invalid
+                                                                  -- update key lk -> lk' in key list
+                                                               in undefined  
+                   | par == pright && rightExtra == Just True -> undefined 
+                   | otherwise -> Nothing
+                 (Internal h ks ts par)
+                   | par == pleft && leftExtra == Just True -> let trueNeighbor = fromJust leftNeighbor
+                                                                   nks = getKeys trueNeighbor
+                                                                   lk' = maximum nks
+                                                                   ki' = (lk',rk)
+                                                                   nki' = (minimum nks, maximum (init nks))
+                                                               in undefined
+                   | par == pright && rightExtra == Just True -> undefined
+                   | otherwise -> Nothing
+               where ki@(lk,rk) = getKeyIntvl node
+                     h = getHeight node
+                     leftNeighbor = snd <$> M.lookupLT ki (hm M.! h)
+                     pleft = join $ getParent <$> leftNeighbor
+                     leftExtra = (hasExtraKey m) <$> leftNeighbor
+                     rightNeighbor = snd <$> M.lookupGT ki (hm M.! h)
+                     pright = join $ getParent <$> rightNeighbor
+                     rightExtra = (hasExtraKey m) <$> rightNeighbor
 
--- Maybe to Bool
+-- Checks if a neighbor has a spare key
+hasExtraKey :: (Ord k, Eq k) => BranchFactor -> Node k v -> Bool
+hasExtraKey m node = case node of
+            (Leaf _ ks _ _)
+              | (length ks) == m -> False
+              | otherwise -> True
+            (Internal _ ks _ _)
+              | (length ks) == (m-1) -> False
+              | otherwise -> True
+            
+ 
+-- Collapses Maybe a to Bool
 isJust :: Maybe a -> Bool
 isJust Nothing = False
 isJust _ = True
 
--- merges nodes (assumes first argument node is on the left and that heights match, defaults to left parent)
+-- Merges nodes (assumes first argument node is on the left and that heights & parents match, alternatively these could be implemented as checks)
 mergeNodes :: (Ord k, Eq k) => Node k v -> Node k v -> Node k v
 mergeNodes (Leaf h ks vs par) (Leaf _ ks' vs' _) = Leaf h (ks++ks') (vs++vs') par
 mergeNodes (Internal h ks kids par) (Internal _ ks' kids' _) = Internal h (ks++ks') (kids++kids') par
 mergeNodes _ _ = error "Mismatched nodes" -- If node types don't match
-{-
--- Deletes key (and associated value), may upset invariant 
-delete :: (Ord k, Eq k) => BPTree k v -> k -> BPTree k v
-delete (Nil _) _ = error "Deleting from an empty tree"
-delete (Node m ks ts par) x = Node m ks (ls ++ [delete r x] ++ rs) par
-  where idx = findIndex (< x) ks 
-        shiftIdx mi = case mi of Empty = 0
-                                 Full i = i+1
-        splitpt = shiftIdx idx
-        (ls,r:rs) = splitAt splitpt ts
-delete (Leaf m keys vals par) x = let (ks,vs) = outOfAssoc x (keys,vals) in Leaf m ks vs par
--- Does the work of shifting keys/merging nodes to restore invariant. After (delete t x), call this on (search t x)  
-fixBranchingMinus :: (Ord k, Eq k) => BPTree k v -> k -> BPTree k v
-fixBranchingMinus t@(Nil _) _ = t
-fixBranchingMinus l@(Leaf m ks vs par) x
-  | (length ks) >= m = maybe l fixBranchingMinus par
-  | (length nks) > m = undefined -- Extra keys to the right, shift one over
-  | (length pks) > m = undefined -- Extra keys to the left, shift one over
-  | otherwise = undefined -- Both sides at minimum, do a merge
-  where (Leaf _ nks nvs npar) = nextNode l
-        (Leaf _ pks pvs ppar) = prevNode l
-fixBranchingPlus n@(Node ks ts par) x
-  | (length ts) >= m = maybe n fixBranchingMinus par
-  | (length nts) > m = undefined -- Extra keys to the right, shift one over
-  | (length pts) > m = undefined -- Extra keys to the left, shift one over
-  | otherwise = undefined -- Both sides at minimum, do a merge
-  where (Node _ nks nts npar) = nextNode n
-        (Leaf _ pks pts ppar) = prevNode n
--- Gets the next node in the same level (to be used for shifting/merging purposes)
---nextLeaf ::
-nextNode = undefined
--- Gets the previous node in the same level (to be used for shifting/merging purposes)
---prevLeaf ::
-prevNode = undefined
--- Moves about keys among nodes
---shift ::
-shift = undefined
--- Merges two nodes into one
---merge ::
-merge = undefined
-                                     
--- Takes key + corresponding value out of associated pair of lists (used for deleting from leaf node)
-outOfAssoc :: (Ord k, Eq k) => k -> ([k],[v]) -> ([k],[v])
-outOfAssoc _ pair@([],_) = pair
-outOfAssoc x pair@(keys@(k:ks),vals@(v:vs))
-  | x < k = pair
-  | x == k = (ks,vs)
-  | otherwise = (<$>) $ (:) $ (k,v) (outOfAssoc x (ks,vs))
--}
-  
--- Helpers
 
-empty :: Int -> BPTree Int Int
-empty = BPTree Nil M.empty
+-- MORE HELPERS
 
-emptyS :: Int -> BPTree Int String
-emptyS = BPTree Nil M.empty
+empty :: BPTree Int Int
+empty = BPTree Nil M.empty 2
 
-makeTree :: Int -> Int -> BPTree Int Int
-makeTree n b = fromList (zip [1..n] [1..]) (empty b)
+emptyS :: BPTree Int String
+emptyS = BPTree Nil M.empty 2
 
-makeTree' :: Int -> Int -> BPTree Int Int
-makeTree' n b = fromList (zip [n,(n-1)..1] [n,(n-1)..1]) (empty b)
+makeTree :: Int -> BPTree Int Int
+makeTree n = fromList (zip [1..n] [1..]) empty
+
+makeTree' :: Int -> BPTree Int Int
+makeTree' n = fromList (zip [n,(n-1)..1] [n,(n-1)..1]) empty
 
 fromList :: (Ord k, Eq k) => [(k,v)] -> BPTree k v -> BPTree k v  
 fromList kvs t =
    foldr (\(x,y) acc -> insert acc x y) t kvs
- 
+   
+t :: BPTree Int Int
+t = makeTree 10
+
+-- TESTS
+main :: IO ()
+main = print t
