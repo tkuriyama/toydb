@@ -131,6 +131,7 @@ fromJust :: Maybe a -> a
 fromJust Nothing = error "Nothing"
 fromJust (Just a) = a
 
+
 -- LOOKUP FUNCTIONS
 
 findIndex :: (Ord k, Eq k) => [k] -> k -> Int
@@ -611,6 +612,7 @@ delPtr hm ptr node = case node of
                                               ki = getKeyIntvl node
                                               hm' = M.adjust (M.insert ki n') h hm -- overwrites old copy of node
                                           in (hm',n')
+
   
 -- Helpers
 
