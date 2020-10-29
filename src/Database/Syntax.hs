@@ -4,11 +4,11 @@ import qualified Data.Text as T
 
 -- Everything is an expression; no recursion required
 data Expr
-  = Create Table [Column]
-  | Drop Table
-  | Select FieldSelect Table [Condition]
-  | Insert Table [FieldValue]
-  | Delete Table [Condition]
+  = Create TableName [Column]
+  | Drop TableName
+  | Select FieldSelect TableName [Condition]
+  | Insert TableName [FieldValue]
+  | Delete TableName [Condition]
   deriving (Show, Eq)
 
 data FieldSelect
@@ -16,19 +16,25 @@ data FieldSelect
   | AllFields
   deriving (Show, Eq)
 
-data Column = Column IsPKey FieldName FieldType
+data Column = Column {colIsPkey :: IsPKey, colFieldName :: FieldName, colFieldType :: FieldType}
   deriving (Show, Eq)
 
 type IsPKey = Bool
 
-type Table = String
+type TableName = String
 
-data Condition = Condition FieldName ComparisonOp FieldValue
+data Condition
+  = Condition FieldName ComparisonOp FieldValue
   deriving (Show, Eq)
 
 type FieldName = String
 
-data ComparisonOp = Eq | Gt | Gte | Lt | Lte
+data ComparisonOp
+  = Eq
+  | Gt
+  | Gte
+  | Lt
+  | Lte
   deriving (Show, Eq)
 
 data FieldValue

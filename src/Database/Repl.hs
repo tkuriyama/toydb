@@ -1,15 +1,17 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Database.Repl where
 
-import Control.Monad (unless)
 import Control.Monad.IO.Class (liftIO)
+import qualified Data.Map as Map
+import Database.Main
+  ( Database,
+    execExpr,
+  )
+import qualified Database.Parser as P
+  ( parseExpr,
+  )
 import System.Console.Haskeline
-import System.IO (hFlush, stdout)
-
-import Database.Main (Database, execExpr)
-import qualified Database.Parser as P (parseExpr)
-
-readInput :: IO String
-readInput = putStr "> " >> hFlush stdout >> getLine
 
 process :: Database -> String -> IO (Maybe Database)
 process db expr = do
@@ -17,18 +19,23 @@ process db expr = do
   case parsedExpr of
     Left err -> print err >> return Nothing
     Right expr' -> do
-      let newdb = execExpr db expr'
-      return $ Just newdb
+      case execExpr db expr' of
+        Left err -> do
+          print err
+          return Nothing
+        Right (newdb, msg) -> do
+          print msg
+          return $ Just newdb
 
 repl :: IO ()
-repl = runInputT defaultSettings (loop Placeholder)
+repl = runInputT defaultSettings (loop Map.empty)
   where
     loop db = do
       input' <- getInputLine "> "
       case input' of
         Nothing -> outputStrLn "Quitting..."
         Just input -> do
-          newDb <- liftIO $ process db input
-          case newDb of
+          newDb' <- liftIO $ process db input
+          case newDb' of
             Nothing -> loop db
             Just newDb -> loop newDb

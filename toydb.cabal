@@ -26,9 +26,10 @@ executable toydb
       Database.BPTreeView
   build-depends:       
       base >= 4.7 && < 5
-      , text
+    , text
     , parsec
     , haskeline 
+    , containers
       
 library
   exposed-modules:
@@ -63,6 +64,7 @@ test-suite database-tests
       Database.BPlusTreeSpec
       Database.SerializeSpec
       Database.ParserSpec
+      Database.MainSpec
   hs-source-dirs:
       test
   ghc-options:
