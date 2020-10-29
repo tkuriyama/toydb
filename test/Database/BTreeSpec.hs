@@ -1,6 +1,6 @@
 module Database.BTreeSpec where
 
-import Database.BTree
+import qualified Database.BTree as BT
 import Test.Hspec
   ( Spec,
     describe,
@@ -12,4 +12,5 @@ import Test.QuickCheck ((===))
 
 spec :: Spec
 spec = do
-  it "always true" $ True == True
+  describe "insert" $ do
+    it True `shouldBe` True
