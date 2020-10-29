@@ -1,4 +1,4 @@
-module Database.BPlusTree where
+--module Database.BPlusTree where
 
 -- TO DO:
 -- Implement deletion methods
@@ -148,7 +148,7 @@ search bt x =
     n@(Internal _ ks ts _) -> let hm = heightmap bt
                                   m = branchfactor bt
                                   idx = findIndex ks x
-                                  cptr = ts !! idx 
+                                  cptr = ts !! idx
                                   child = getNodeMap hm cptr
                               in search (BPTree child hm m) x
 
@@ -175,8 +175,7 @@ insertImproper bt x y = case node of
                   Nil -> let l = Leaf 0 [x] [y] Nothing
                          in BPTree l (M.singleton 0 (M.singleton (x,x) l)) m
                   -- Internal node: delete child reference and go down
-                  (Internal h ks ts par) -> let idx = L.findIndex (<= x) ks 
-                                                splitpt = shiftIdx idx
+                  (Internal h ks ts par) -> let splitpt = findIndex ks x
                                                 (ls,r:rs) = splitAt splitpt ts
                                                 ts' = ls ++ rs
                                                 n = Internal h ks ts' par
@@ -208,13 +207,13 @@ fixBranchingPlus bt = case node of
                     -- unfull root: do nothing
                     | h == 0 -> bt
                     -- unfull proper leaf: fix parent from here then recurse up
-                    | (length ks) <= (2*m-1) -> let truepar = fromJust par
-                                                    pnode = getNodeMap hm truepar
+                    | (length ks) <= (2*m-1) -> let truePar = fromJust par
+                                                    pnode = getNodeMap hm truePar
                                                     (phm,pnode') = placePtr hm (h,ki) pnode
                                                 in fixBranchingPlus (BPTree pnode' phm m)
                     -- full: split this node, update hm to reflect split, (re)place altered kids & key in parent, call fixBranching there
-                    | otherwise -> let truepar = fromJust par
-                                       pnode = getNodeMap hm' truepar
+                    | otherwise -> let truePar = fromJust par
+                                       pnode = getNodeMap hm' truePar
                                        (phm', pnode') = placeKey hm' x pnode
                                        ki' = getKeyIntvl pnode'
                                        ts' = getKids pnode'
@@ -234,12 +233,12 @@ fixBranchingPlus bt = case node of
                                                           roothm = M.insert 0 (M.singleton (x,x) newroot) (mapHeightShift 1 hmfold') 
                                                       in BPTree newroot roothm m
                     | h == 0 -> bt
-                    | (length ts) <= (2*m-1) -> let truepar = fromJust par
-                                                    pnode = getNodeMap hm truepar
+                    | (length ts) <= (2*m-1) -> let truePar = fromJust par
+                                                    pnode = getNodeMap hm truePar
                                                     (phm,pnode') = placePtr hm (h,ki) pnode
                                                 in fixBranchingPlus (BPTree pnode' phm m)
-                    | otherwise -> let truepar = fromJust par
-                                       pnode = getNodeMap hmfold' truepar
+                    | otherwise -> let truePar = fromJust par
+                                       pnode = getNodeMap hmfold' truePar
                                        (phm', pnode') = placeKey hmfold' x pnode
                                        ki' = getKeyIntvl pnode'
                                        ts' = getKids pnode'
@@ -279,7 +278,7 @@ split (Internal h ks ts par) m = ((Internal h (take (m-1) ks) (take m ts) p), (I
 keyIntvlAlter :: (Ord k, Eq k) => k -> KeyInterval k -> KeyInterval k
 keyIntvlAlter a (b,c) = (min a b, max a c)
 
--- Places a new key into a node and update HeightMap accordingly
+-- Places a new key into a node and updates HeightMap accordingly
 placeKey :: (Ord k, Eq k) => HeightMap k v -> k -> Node k v -> (HeightMap k v, Node k v)
 placeKey hm x Nil = let n = Internal 0 [x] [] Nothing 
                         in (M.insert 0 (M.singleton (x,x) n) hm, n)
@@ -290,21 +289,21 @@ placeKey hm x n@(Internal h ks ts par) = let n' = Internal h (L.insert x ks) ts 
                                              hm' = M.adjust ((M.insert ki' n') . (M.delete ki)) h hm
                                          in (hm',n')
                                         
--- Parent-to-child pointer updating helper function - intended to add back pointer to child updated in insertion process
+-- Parent-to-child pointer updating helper function - intended to add back pointer to child updated in insertion/deletion process
 -- This change is crystallized by storing it in the HeightMap
 placePtr :: (Ord k, Eq k) => HeightMap k v -> TreePtr k -> Node k v -> (HeightMap k v, Node k v)
 placePtr hm ptr node = case node of
                 Nil -> error "Parent is empty"
-                (Leaf _ _ _ _) -> error "Parent is leaf" -- shouldn't happen, but could be implemented
+                (Leaf _ _ _ _) -> error "Parent is leaf"
                 (Internal h ks ts par) -> let x = fst $ snd $ ptr
-                                              idx = L.findIndex (<= x) ks 
-                                              splitpt = shiftIdx idx
+                                              splitpt = findIndex ks x
                                               (ls,rs) = splitAt splitpt ts
                                               ts' = ls ++ [ptr] ++ rs
                                               n' = Internal h ks ts' par
                                               ki = getKeyIntvl node
                                               hm' = M.adjust (M.insert ki n') h hm -- overwrites old copy of node
                                           in (hm',n')
+                                          
 -- Changes parent pointers (for fixing references after splits or merges)                                            
 placeParent :: (Ord k, Eq k) => HeightMap k v -> TreePtr k -> Node k v -> (HeightMap k v, Node k v)
 placeParent _ _ Nil = error "Parent of empty node"
@@ -329,6 +328,11 @@ intoAssoc x y (keys@(k:ks),vals@(v:vs))
 
 -- DELETION FUNCTIONS (UNDER CONSTRUCTION)
 -- Here the previous site doesn't provide sufficient explanation, see here for further detail https://www.programiz.com/dsa/deletion-from-a-b-plus-tree
+-- These slides are also helpful http://avid.cs.umass.edu/courses/445/f2008/17-tree-indexes-2.pdf
+
+-- Deletes key from tree and rebalances to maintain invariant
+delete :: (Ord k, Eq k) => BPTree k v -> k -> BPTree k v
+delete bt x = fixBranchingMinus $ deleteImproper bt x
 
 -- Deletes key-value pair from (leaf of) tree
 -- erases (reference to) child pointers as it descends (to be fixed on way up)
@@ -339,8 +343,7 @@ deleteImproper bt x = case node of
                   -- Empty node: do nothing
                   Nil -> bt
                   -- Internal node: delete child reference and go down
-                  (Internal h ks ts par) -> let idx = L.findIndex (<= x) ks 
-                                                splitpt = shiftIdx idx
+                  (Internal h ks ts par) -> let splitpt = findIndex ks x
                                                 (ls,r:rs) = splitAt splitpt ts
                                                 ts' = ls ++ rs
                                                 n = Internal h ks ts' par
@@ -379,14 +382,31 @@ fixBranchingMinus bt = case node of
                     -- root & still has keys: do nothing
                     | h == 0 -> bt
                     -- proper leaf, still enough keys: fix parent from here then recurse up
-                    | (length ks) >= m -> let truepar = fromJust par
-                                              pnode = getNodeMap hm truepar
+                    | (length ks) >= m -> let truePar = fromJust par
+                                              pnode = getNodeMap hm truePar
                                               (phm,pnode') = placePtr hm (h,ki) pnode
                                           in fixBranchingMinus (BPTree pnode' phm m)
                     -- underflow: first try to take keys from neighbors if they have any to spare
-                    -- otherwise merge this with one of its neighbors
-                    -- either way update hm to reflect changes, repair kid ptrs & keys in parent as necessary, call fixBranching there
-                    | otherwise -> undefined -- Need to write this
+                    | isJust (attemptRedistribute hm m node) -> fixBranchingMinus . fromJust $ attemptRedistribute hm m node -- This is bad but I don't know how to do "if let" in Haskell                              
+                    -- otherwise merge this with one of its neighbors (on right by default)
+                    | otherwise -> let leftNeighbor = snd <$> M.lookupLT ki (hm M.! h)
+                                       rightNeighbor = snd <$> M.lookupGT ki (hm M.! h)
+                                       maybe' n f ma = if (isJust ma) then (f $ fromJust ma) else n  -- regular maybe is lazy in the function, need alternative version lazy in the default value
+                                       neighbor = maybe' (fromJust leftNeighbor) id rightNeighbor
+                                       dir = isJust rightNeighbor -- tells us which direction was chosen
+                                       (ml@(Leaf _ mks mvs _), mki, delk) = if dir then (mergeNodes node neighbor) else (mergeNodes neighbor node)
+                                       nki = getKeyIntvl neighbor
+                                       truePar = fromJust par
+                                       pnode = getNodeMap hm truePar
+                                       pks = getKeys pnode
+                                       pks' = L.delete delk pks
+                                       pki' = (minimum pks', maximum pks')
+                                       ml' = Leaf h mks mvs (Just ((h-1),pki'))
+                                       hm' = M.adjust ((M.insert mki ml') . (M.delete nki) . (M.delete ki)) h hm
+                                       (phm,pnode') = delPtr hm' (h,nki) pnode
+                                       (phm',pnode'') = delKey phm delk pnode'
+                                       (phm'',pnode''')= placePtr phm' (h,mki) pnode''
+                                   in fixBranchingMinus $ BPTree pnode''' phm'' m
                   -- the internal cases are all analogous to the leaf cases, except that of erasing the root node       
                   n@(Internal h ks ts par)
                     -- removing the final key from internal root: the merged node one level below is the new root, heights all go down one
@@ -394,23 +414,44 @@ fixBranchingMinus bt = case node of
                                                         newroot = recoverRootFromMap roothm  
                                                     in BPTree newroot roothm m
                     | h == 0 -> bt
-                    | (length ts) >= m -> let truepar = fromJust par
-                                              pnode = getNodeMap hm truepar
+                    | (length ts) >= m -> let truePar = fromJust par
+                                              pnode = getNodeMap hm truePar
                                               (phm,pnode') = placePtr hm (h,ki) pnode
                                           in fixBranchingPlus (BPTree pnode' phm m)
-                    | otherwise -> undefined -- Need to write this
+                    | isJust (attemptRedistribute hm m node) -> fixBranchingMinus . fromJust $ attemptRedistribute hm m node
+                    -- here the separating key in the parent node is pulled into the merged node instead of being discarded
+                    | otherwise -> let leftNeighbor = snd <$> M.lookupLT ki (hm M.! h)
+                                       rightNeighbor = snd <$> M.lookupGT ki (hm M.! h)
+                                       maybe' n f ma = if (isJust ma) then (f $ fromJust ma) else n  -- regular maybe is lazy in the function, need alternative version lazy in the default value
+                                       neighbor = maybe' (fromJust leftNeighbor) id rightNeighbor
+                                       dir = isJust rightNeighbor -- tells us which direction was chosen
+                                       (mn@(Internal _ mks mts _), mki, nextk) = if dir then (mergeNodes node neighbor) else (mergeNodes neighbor node)
+                                       nki = getKeyIntvl neighbor
+                                       truePar = fromJust par
+                                       pnode = getNodeMap hm truePar
+                                       pks = getKeys pnode
+                                       -- want the key separating node & nbhr = greatest key < nextk
+                                       splitk = last $ takeWhile (< nextk) pks
+                                       pks' = L.delete splitk pks
+                                       pki' = (minimum pks', maximum pks')
+                                       mks' = L.insert splitk mks
+                                       mn' = Internal h mks mts (Just ((h-1),pki'))
+                                       hm' = M.adjust ((M.insert mki mn') . (M.delete nki) . (M.delete ki)) h hm
+                                       (phm,pnode') = delPtr hm' (h,nki) pnode
+                                       (phm',pnode'') = delKey phm splitk pnode'
+                                       (phm'',pnode''')= placePtr phm' (h,mki) pnode''
+                                   in fixBranchingMinus $ BPTree pnode''' phm'' m
                 where node = root bt
                       hm = heightmap bt
                       m = branchfactor bt
-                      ki = getKeyIntvl node
-                      h = getHeight node
-                      par = getParent node   
+                      ki = getKeyIntvl node 
 
 -- Checks if a node has a neighbor (under the same parent) with keys to spare
 -- If so, redistributes a key and updates the HeightMap accordingly for all affected nodes (the two on this level, all kids, common parent)
-attemptRedistribute :: (Ord k, Eq k) => HeightMap k v -> BranchFactor -> Node k v -> Maybe (HeightMap k v, k)
+-- Gives back whole BPTree to allow for upwards recursion in FixBranchingMinus
+attemptRedistribute :: (Ord k, Eq k) => HeightMap k v -> BranchFactor -> Node k v -> Maybe (BPTree k v)
 attemptRedistribute hm m node = case node of
-                 (Leaf h ks vs par)
+                 (Leaf _ ks vs par)
                    | par == pleft && leftExtra == Just True -> let trueNeighbor = fromJust leftNeighbor
                                                                    nks = getKeys trueNeighbor
                                                                    nvs = getVals trueNeighbor
@@ -426,22 +467,97 @@ attemptRedistribute hm m node = case node of
                                                                    l = Leaf h ks' vs' par
                                                                    nl = Leaf h nks' nvs' par
                                                                    hm' = M.adjust ((M.insert nki' nl) . (M.insert ki' l) . (M.delete nki) . (M.delete ki)) h hm
-                                                                   truePar = getNodeMap hm' (fromJust par)
-                                                                   pks = getKeys truePar
-                                                                   breakks = span (< lk) pks
-                                                                  -- restore kid pointers? keep in mind that there already is one to old lneigh, now invalid
-                                                                  -- update key lk -> lk' in key list
-                                                               in undefined  
-                   | par == pright && rightExtra == Just True -> undefined 
+                                                                   pnode = getNodeMap hm' (fromJust par)
+                                                                   (phm,pnode') = delPtr hm' (h,nki) pnode
+                                                                   (phm',pnode'') = delKey phm lk pnode'
+                                                                   (phm'',pnode''')= placeKey phm' lk' pnode''
+                                                                   (phm''',pnode'''')= placePtr phm'' (h,ki') pnode'''
+                                                                   (phm'''',pnode''''') = placePtr phm''' (h,nki') pnode'''' 
+                                                               in Just (BPTree pnode''''' phm'''' m)
+                   | par == pright && rightExtra == Just True -> let trueNeighbor = fromJust rightNeighbor
+                                                                     nks = getKeys trueNeighbor
+                                                                     nvs = getVals trueNeighbor
+                                                                     nki@(nlk,nrk) = (head nks, last nks) 
+                                                                     v' = head nvs
+                                                                     rk' = nlk
+                                                                     nks' = tail nks
+                                                                     nvs' = tail nvs
+                                                                     nlk' = head nks'
+                                                                     nki' = (nlk',nrk)
+                                                                     ks' = ks ++ [rk']
+                                                                     vs' = vs ++ [v']
+                                                                     ki' = (lk,rk')
+                                                                     l = Leaf h ks' vs' par
+                                                                     nl = Leaf h nks' nvs' par
+                                                                     hm' = M.adjust ((M.insert nki' nl) . (M.insert ki' l) . (M.delete nki) . (M.delete ki)) h hm
+                                                                     pnode = getNodeMap hm' (fromJust par)
+                                                                     (phm,pnode') = delPtr hm' (h,nki) pnode
+                                                                     (phm',pnode'') = delKey phm nlk pnode'
+                                                                     (phm'',pnode''')= placeKey phm' nlk' pnode''
+                                                                     (phm''',pnode'''')= placePtr phm'' (h,ki') pnode'''
+                                                                     (phm'''',pnode''''') = placePtr phm''' (h,nki') pnode'''' 
+                                                                 in Just (BPTree pnode''''' phm'''' m)
                    | otherwise -> Nothing
-                 (Internal h ks ts par)
+                 -- Here there are longer lets that do most of the key & ptr manipulation in-house, looks somewhat nicer than above
+                 (Internal _ ks ts par)
                    | par == pleft && leftExtra == Just True -> let trueNeighbor = fromJust leftNeighbor
+                                                                   pnode = getNodeMap hm (fromJust par)
+                                                                   pks = getKeys pnode
+                                                                   pki = (head pks, last pks)
+                                                                   pts = getKids pnode
+                                                                   ppar = getParent pnode
                                                                    nks = getKeys trueNeighbor
-                                                                   lk' = maximum nks
+                                                                   nts = getKids trueNeighbor
+                                                                   nki@(nlk,nrk) = (head nks, last nks) 
+                                                                   t' = last nts
+                                                                   pk = fromJust (L.find (>nrk) pks) -- Redistribute by "pushing through" parent
+                                                                   pk' = nrk
+                                                                   pks' = L.insert pk' (L.delete pk pks)
+                                                                   pki' = (head pks', last pks')
+                                                                   nks' = init nks
+                                                                   nts' = init nts
+                                                                   nki' = (nlk, last nks')
+                                                                   lk' = pk
+                                                                   ks' = lk':ks
+                                                                   ts' = t':ts
                                                                    ki' = (lk',rk)
-                                                                   nki' = (minimum nks, maximum (init nks))
-                                                               in undefined
-                   | par == pright && rightExtra == Just True -> undefined
+                                                                   pts' = (L.insert (h,ki')) . (L.insert (h,nki')) . (L.delete (h,nki)) $ pts
+                                                                   par' = Just ((h-1), pki')
+                                                                   p = Internal (h-1) pks' pts' ppar
+                                                                   n = Internal h ks' ts' par'
+                                                                   nn = Internal h nks' nts' par'
+                                                                   hm' = M.adjust ((M.insert nki' nn) . (M.insert ki' n) . (M.delete nki) . (M.delete ki)) h hm
+                                                                   hm'' = M.adjust ((M.insert pki' p) . (M.delete pki)) h hm'
+                                                               in Just (BPTree p hm'' m)
+                   | par == pright && rightExtra == Just True -> let trueNeighbor = fromJust rightNeighbor
+                                                                     pnode = getNodeMap hm (fromJust par)
+                                                                     pks = getKeys pnode
+                                                                     pki = (head pks, last pks)
+                                                                     pts = getKids pnode
+                                                                     ppar = getParent pnode
+                                                                     nks = getKeys trueNeighbor
+                                                                     nts = getKids trueNeighbor
+                                                                     nki@(nlk,nrk) = (head nks, last nks) 
+                                                                     t' = head nts
+                                                                     pk = fromJust (L.find (>rk) pks) -- Redistribute by "pushing through" parent
+                                                                     nks' = tail nks
+                                                                     nts' = tail nts
+                                                                     nki' = (head nks', nrk)
+                                                                     pk' = nlk
+                                                                     pks' = L.insert pk' (L.delete pk pks)
+                                                                     pki' = (head pks', last pks')
+                                                                     rk' = pk
+                                                                     ks' = ks ++ [rk']
+                                                                     ts' = ts ++ [t']
+                                                                     ki' = (lk,rk')
+                                                                     pts' = (L.insert (h,ki')) . (L.insert (h,nki')) . (L.delete (h,nki)) $ pts
+                                                                     par' = Just ((h-1), pki')
+                                                                     p = Internal (h-1) pks' pts' ppar
+                                                                     n = Internal h ks' ts' par'
+                                                                     nn = Internal h nks' nts' par'
+                                                                     hm' = M.adjust ((M.insert nki' nn) . (M.insert ki' n) . (M.delete nki) . (M.delete ki)) h hm
+                                                                     hm'' = M.adjust ((M.insert pki' p) . (M.delete pki)) h hm'
+                                                                 in Just (BPTree p hm'' m)
                    | otherwise -> Nothing
                where ki@(lk,rk) = getKeyIntvl node
                      h = getHeight node
@@ -467,61 +583,36 @@ isJust :: Maybe a -> Bool
 isJust Nothing = False
 isJust _ = True
 
--- merges nodes (assumes first argument node is on the left and that heights & parents match, alternatively these could be implemented as checks)
-mergeNodes :: (Ord k, Eq k) => Node k v -> Node k v -> Node k v
-mergeNodes (Leaf h ks vs par) (Leaf _ ks' vs' _) = Leaf h (ks++ks') (vs++vs') par
-mergeNodes (Internal h ks kids par) (Internal _ ks' kids' _) = Internal h (ks++ks') (kids++kids') par
+-- Merges nodes (assumes first argument node is on the left and that heights & parents match, alternatively these could be implemented as checks)
+-- Gives back merged node, its key interval, and the the smallest key on the right
+-- (This is the key that is deleted from the parent in the case of leaves and used to find the splitting key in the parent in the case of internals)
+mergeNodes :: (Ord k, Eq k) => Node k v -> Node k v -> (Node k v, KeyInterval k, k)
+mergeNodes (Leaf h ks vs par) (Leaf _ ks' vs' _) = (Leaf h (ks++ks') (vs++vs') par, (head ks, last ks'), head ks')
+mergeNodes (Internal h ks kids par) (Internal _ ks' kids' _) = (Internal h (ks++ks') (kids++kids') par, (head ks, last ks'), head ks')
 mergeNodes _ _ = error "Mismatched nodes" -- If node types don't match
 
-{-
--- Deletes key (and associated value), may upset invariant 
-delete :: (Ord k, Eq k) => BPTree k v -> k -> BPTree k v
-delete (Nil _) _ = error "Deleting from an empty tree"
-delete (Node m ks ts par) x = Node m ks (ls ++ [delete r x] ++ rs) par
-  where idx = findIndex (< x) ks 
-        shiftIdx mi = case mi of Empty = 0
-                                 Full i = i+1
-        splitpt = shiftIdx idx
-        (ls,r:rs) = splitAt splitpt ts
-delete (Leaf m keys vals par) x = let (ks,vs) = outOfAssoc x (keys,vals) in Leaf m ks vs par
--- Does the work of shifting keys/merging nodes to restore invariant. After (delete t x), call this on (search t x)  
-fixBranchingMinus :: (Ord k, Eq k) => BPTree k v -> k -> BPTree k v
-fixBranchingMinus t@(Nil _) _ = t
-fixBranchingMinus l@(Leaf m ks vs par) x
-  | (length ks) >= m = maybe l fixBranchingMinus par
-  | (length nks) > m = undefined -- Extra keys to the right, shift one over
-  | (length pks) > m = undefined -- Extra keys to the left, shift one over
-  | otherwise = undefined -- Both sides at minimum, do a merge
-  where (Leaf _ nks nvs npar) = nextNode l
-        (Leaf _ pks pvs ppar) = prevNode l
-fixBranchingPlus n@(Node ks ts par) x
-  | (length ts) >= m = maybe n fixBranchingMinus par
-  | (length nts) > m = undefined -- Extra keys to the right, shift one over
-  | (length pts) > m = undefined -- Extra keys to the left, shift one over
-  | otherwise = undefined -- Both sides at minimum, do a merge
-  where (Node _ nks nts npar) = nextNode n
-        (Leaf _ pks pts ppar) = prevNode n
--- Gets the next node in the same level (to be used for shifting/merging purposes)
---nextLeaf ::
-nextNode = undefined
--- Gets the previous node in the same level (to be used for shifting/merging purposes)
---prevLeaf ::
-prevNode = undefined
--- Moves about keys among nodes
---shift ::
-shift = undefined
--- Merges two nodes into one
---merge ::
-merge = undefined
-                                     
--- Takes key + corresponding value out of associated pair of lists (used for deleting from leaf node)
-outOfAssoc :: (Ord k, Eq k) => k -> ([k],[v]) -> ([k],[v])
-outOfAssoc _ pair@([],_) = pair
-outOfAssoc x pair@(keys@(k:ks),vals@(v:vs))
-  | x < k = pair
-  | x == k = (ks,vs)
-  | otherwise = (<$>) $ (:) $ (k,v) (outOfAssoc x (ks,vs))
--}
+-- Deletes a key from a node and updates HeightMap accordingly
+delKey :: (Ord k, Eq k) => HeightMap k v -> k -> Node k v -> (HeightMap k v, Node k v)
+delKey hm x Nil = (hm, Nil)
+delKey _ _ (Leaf _ _ _ _) = error "Deleting into leaf" -- this should never come up the way deletion works right now but it can't hurt to write it
+delKey hm x n@(Internal h ks ts par) = let n' = Internal h (L.delete x ks) ts par
+                                           ki = getKeyIntvl n
+                                           ki' = getKeyIntvl n'
+                                           hm' = M.adjust ((M.insert ki' n') . (M.delete ki)) h hm
+                                         in (hm',n')
+                                        
+-- Parent-to-child pointer updating helper function - intended to add back pointer to child updated in insertion/deletion process
+-- This change is crystallized by storing it in the HeightMap
+delPtr :: (Ord k, Eq k) => HeightMap k v -> TreePtr k -> Node k v -> (HeightMap k v, Node k v)
+delPtr hm ptr node = case node of
+                Nil -> error "Parent is empty"
+                (Leaf _ _ _ _) -> error "Parent is leaf"
+                (Internal h ks ts par) -> let ts' = L.delete ptr ts
+                                              n' = Internal h ks ts' par
+                                              ki = getKeyIntvl node
+                                              hm' = M.adjust (M.insert ki n') h hm -- overwrites old copy of node
+                                          in (hm',n')
+
   
 -- Helpers
 
@@ -540,4 +631,10 @@ makeTree' n b = fromList (zip [n,(n-1)..1] [n,(n-1)..1]) (empty b)
 fromList :: (Ord k, Eq k) => [(k,v)] -> BPTree k v -> BPTree k v  
 fromList kvs t =
    foldr (\(x,y) acc -> insert acc x y) t kvs
- 
+   
+t :: BPTree Int Int
+t = makeTree 13 2
+
+-- TESTS
+main :: IO ()
+main = print (delete t 1)
