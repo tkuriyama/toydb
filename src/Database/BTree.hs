@@ -36,39 +36,52 @@ insertTree _     k v Empty = NoPop $ Node Empty [(k, v, Empty)]
 insertTree order k v node@(Node nt nts) = case k `elem` keys of
   True -> NoPop node  -- no-op
   False -> case nt of  
-    Empty -> insertToLeaf order k v node
-    subTree@(Node _ _) -> insertToSubT order k v node
+    Empty -> insertLeaf order k v node
+    (Node _ _) -> insertSubT order k v node
   where    
     keys = NE.map fst' nts
 
-insertToLeaf :: Ord k => Order -> k -> v -> Tree k v -> InsertResult k v
-insertToLeaf order k v (Node _ nts) =
-  case NE.length nts < order - 1 of
+insertLeaf :: Ord k => Order -> k -> v -> Tree k v -> InsertResult k v
+insertLeaf order k v (Node _ nts) =
+  case hasRoom of
     True -> NoPop $ Node Empty nts'
     False -> let (nts1, nts2) = NE.splitAt (order `div` 2) nts'
-                 ((k, v, _), nts2') = (head nts2, tail nts2)
+                 ((k, v, _), nts2') = (head nts2, tail nts2) -- safe!
              in Pop (toNode nts1) k v (toNode nts2')
-  where   
+  where
+    hasRoom = NE.length nts < order - 1
     nts' = NE.fromList $
            L.insertBy (compare `on` fst') (k, v, Empty) $ NE.toList nts
     toNode xs = Node Empty $ NE.fromList xs
     
-insertToSubT :: Ord k => Order -> k -> v -> Tree k v -> InsertResult k v
-insertToSubT order  k v node@(Node nt nts) =
-  if k < k1 then
-      case insertTree order k v node of
-        NoPop t' -> NoPop $ Node t' nts
-        Pop t1' k' v' t2' ->
-          if NE.length nts < order - 1 then
-            NoPop $ Node t1' ((k', v', t2') NE.<| nts)
-          else
-            undefined
-  else 
-    undefined
+insertSubT :: Ord k => Order -> k -> v -> Tree k v -> InsertResult k v
+insertSubT order k v node@(Node nt nts) =
+  case insertTree order k v (indexT i node) of
+    NoPop t' -> NoPop $ replaceIndexT i node t'
+    Pop t1' k' v' t2' ->
+      if hasRoom then
+        NoPop $ Node t1' ((k', v', t2') NE.<| nts)
+      else
+        mergePop node t1' k' v' t2' 
   where
-    (k1, v1, t1) = NE.head nts
+    i = findIndexT k node
+    hasRoom = NE.length nts < order - 1
+
+mergePop :: Ord k => Tree k v -> Tree k v -> k -> v -> Tree k v ->
+            InsertResult k v
+mergePop = undefined
 
 ------------------------ Helpers ------------------------
+
+findIndexT :: Ord k => k -> Tree k v -> Int
+findIndexT k (Node nt nts) = L.foldl f 0 $ NE.toList $ NE.map fst' nts
+  where f i k' = if k < k' then i else i + 1
+
+indexT :: Ord k => Int -> Tree k v -> Tree k v
+indexT = undefined
+
+replaceIndexT :: Ord k => Int -> Tree k v -> Tree k v -> Tree k v
+replaceIndexT = undefined
 
 fst' :: (a, b, c) -> a
 fst' (x, _, _) = x
