@@ -72,9 +72,9 @@ execExpr :: Database -> Expr -> ExprResult
 execExpr db expr = case expr of
   (Create tbl cols) -> createTable db tbl cols
   (Drop tbl) -> dropTable db tbl
-  (Select fs tbl conds) -> select db fs tbl conds
-  (Insert tbl fvs) -> insertx db tbl fvs
-  (Delete tbl conds) -> delete db tbl conds
+  (Select fs tbl conds) -> selectFrom db fs tbl conds
+  (Insert tbl fvs) -> insertInto db tbl fvs
+  (Delete tbl conds) -> deleteFrom db tbl conds
 
 -- TODO: Refactor nested case statements
 createTable :: Database -> TableName -> [Column] -> ExprResult
@@ -92,11 +92,11 @@ dropTable db name = case verifyTableName db name of
   False -> Left "Table doesn't exist"
   True -> Right (Map.delete name db, "Successfully deleted table")
 
-select :: Database -> FieldSelect -> TableName -> [Condition] -> ExprResult
-select db fs tbl conds = placeholderfunc
+selectFrom :: Database -> FieldSelect -> TableName -> [Condition] -> ExprResult
+selectFrom db fs tbl conds = placeholderfunc
 
-insertx :: Database -> TableName -> [FieldValue] -> ExprResult
-insertx db tbl fvs = placeholderfunc
+insertInto :: Database -> TableName -> [FieldValue] -> ExprResult
+insertInto db tbl fvs = placeholderfunc
 
-delete :: Database -> TableName -> [Condition] -> ExprResult
-delete db tbl conds = placeholderfunc
+deleteFrom :: Database -> TableName -> [Condition] -> ExprResult
+deleteFrom db tbl conds = placeholderfunc
