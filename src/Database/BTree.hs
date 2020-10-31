@@ -47,21 +47,18 @@ insertLeaf :: Ord k => Order -> k -> v -> Tree k v -> InsertResult k v
 insertLeaf ord k v (Node _ nts) =
   case hasRoom of
     True -> NoPop $ Node Empty nts'
-    False -> let (nts1, nts2) = NE.splitAt (ord `div` 2) nts'
-                 ((k', v', _), nts2') = (head nts2, tail nts2) -- safe!
-             in Pop (toNode nts1) k' v' (toNode nts2')
+    False -> splitNode ord $ Node Empty nts'
   where
     hasRoom = NE.length nts < ord - 1
     nts' = insertTriple nts (k, v, Empty)
-    toNode xs = Node Empty $ NE.fromList xs
     
 insertSubT :: Ord k => Order -> k -> v -> Tree k v -> InsertResult k v
 insertSubT ord k v node@(Node _ nts) =
   case insertTree ord k v (indexT i node) of
     NoPop t' -> NoPop $ replaceIndexT i t' node
     Pop t1' k' v' t2' ->
-      let node' = mergeNoPop i node t1' k' v' t2'
-      in if hasRoom then node' else resplitPop ord node'
+      let (NoPop node') = mergeNoPop i node t1' k' v' t2'
+      in if hasRoom then NoPop node' else splitNode ord node'
   where
     i = findIndexT k node
     hasRoom = NE.length nts < ord - 1
@@ -72,18 +69,18 @@ mergeNoPop _ Empty _ _ _ _ = error "Cannot mergeNoPop empty tree"
 mergeNoPop i (Node nt nts) t1 k v t2 = case i of
   0 -> NoPop $ Node t1 $ (k, v, t2) NE.<| nts
   _ -> NoPop $ replaceIndexT i t1 $ Node nt $ insertTriple nts (k, v, t2)
-
-resplitPop :: Ord k => Order -> InsertResult k v -> InsertResult k v
-resplitPop ord (NoPop (Node nt nts)) =
-  let (nts1, nts2) = NE.splitAt (ord `div` 2) nts
-      ((k', v', nt'), nts2') = (head nts2, tail nts2) -- safe!
-  in Pop (Node nt $ NE.fromList nts1) k' v' (Node nt' $ NE.fromList nts2')
-resplitPop _ _ = error "Can only resplitPop NoPop $ Node..."
                                         
 insertTriple :: Ord k => NE.NonEmpty (k, v, Tree k v) -> (k, v, Tree k v) ->
                 NE.NonEmpty (k, v, Tree k v)
 insertTriple xs x = NE.fromList $
                     L.insertBy (compare `on` fst') x $ NE.toList xs
+
+splitNode :: Ord k => Order -> Tree k v -> InsertResult k v
+splitNode _ Empty = error "Cannot split empty list"
+splitNode ord (Node nt nts) = 
+  let (nts1, nts2) = NE.splitAt (ord `div` 2) nts
+      ((k', v', nt'), nts2') = (head nts2, tail nts2) -- safe!
+  in Pop (Node nt $ NE.fromList nts1) k' v' (Node nt' $ NE.fromList nts2')
 
 ------------------------ Delete ------------------------ 
 
