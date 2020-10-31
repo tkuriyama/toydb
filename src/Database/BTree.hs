@@ -25,6 +25,16 @@ data InsertResult k v
 
 ------------------------ Seach ------------------------ 
 
+findT :: Ord k => k -> BTree k v -> Maybe v
+findT k (BTree ord t) = case t of
+  Empty -> Nothing
+  (Node _ nts) ->
+    if k `elem` keys then
+      Just $ snd' $ head $ NE.dropWhile (\(k', _, _) -> k' /= k) nts
+    else
+      findT k $ BTree ord $ indexT (findIndexT k t) t
+    where keys = NE.map fst' nts
+
 ------------------------ Insert ------------------------ 
 
 insertT :: Ord k => k -> v -> BTree k v -> BTree k v
