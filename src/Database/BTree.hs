@@ -23,6 +23,8 @@ data InsertResult k v
   | Pop (Tree k v) k v (Tree k v)
   deriving (Show)
 
+------------------------ Seach ------------------------ 
+
 ------------------------ Insert ------------------------ 
 
 insertT :: Ord k => k -> v -> BTree k v -> BTree k v
@@ -54,55 +56,66 @@ insertLeaf ord k v (Node _ nts) =
     toNode xs = Node Empty $ NE.fromList xs
     
 insertSubT :: Ord k => Order -> k -> v -> Tree k v -> InsertResult k v
-insertSubT ord k v node@(Node nt nts) =
+insertSubT ord k v node@(Node _ nts) =
   case insertTree ord k v (indexT i node) of
     NoPop t' -> NoPop $ replaceIndexT i t' node
     Pop t1' k' v' t2' ->
-      if hasRoom then
-        mergeNoPop i node t1' k' v' t2' 
-      else
-        mergePop node t1' k' v' t2' 
+      let node' = mergeNoPop i node t1' k' v' t2'
+      in if hasRoom then node' else resplitPop ord node'
   where
     i = findIndexT k node
     hasRoom = NE.length nts < ord - 1
 
 mergeNoPop :: Ord k => Int -> Tree k v -> Tree k v -> k -> v -> Tree k v ->
             InsertResult k v
+mergeNoPop _ Empty _ _ _ _ = error "Cannot mergeNoPop empty tree"            
 mergeNoPop i (Node nt nts) t1 k v t2 = case i of
-  0 ->  NoPop $ Node t1 $ (k, v, t2) NE.<| nts
+  0 -> NoPop $ Node t1 $ (k, v, t2) NE.<| nts
   _ -> NoPop $ replaceIndexT i t1 $ Node nt $ insertTriple nts (k, v, t2)
 
-mergePop :: Ord k => Tree k v -> Tree k v -> k -> v -> Tree k v ->
-            InsertResult k v
-mergePop = undefined
-
+resplitPop :: Ord k => Order -> InsertResult k v -> InsertResult k v
+resplitPop ord (NoPop (Node nt nts)) =
+  let (nts1, nts2) = NE.splitAt (ord `div` 2) nts
+      ((k', v', nt'), nts2') = (head nts2, tail nts2) -- safe!
+  in Pop (Node nt $ NE.fromList nts1) k' v' (Node nt' $ NE.fromList nts2')
+resplitPop _ _ = error "Can only resplitPop NoPop $ Node..."
+                                        
 insertTriple :: Ord k => NE.NonEmpty (k, v, Tree k v) -> (k, v, Tree k v) ->
                 NE.NonEmpty (k, v, Tree k v)
 insertTriple xs x = NE.fromList $
                     L.insertBy (compare `on` fst') x $ NE.toList xs
 
+------------------------ Delete ------------------------ 
+
 ------------------------ Helpers ------------------------
 
 -- Find index i where search key < tree key, or otherwise index of last
 findIndexT :: Ord k => k -> Tree k v -> Int
+findIndexT _ Empty = error "Empty tree cannot be indexed"
 findIndexT k (Node _ nts) = L.foldl f 0 $ NE.toList $ NE.map fst' nts
   where f i k' = if k < k' then i else i + 1
 
 -- Return Tree at index i
 indexT :: Ord k => Int -> Tree k v -> Tree k v
+indexT _ Empty = error "Empty tree has no index"
 indexT i (Node nt nts) = case i of
   0 -> nt
   _ -> trd' $ (NE.!!) nts (i-1)
 
 -- Replace T at index i
 replaceIndexT :: Ord k => Int -> Tree k v -> Tree k v -> Tree k v
+replaceIndexT _ _ Empty = error "Empty tree cannot be indexed"
 replaceIndexT i t (Node nt nts) = case i of
   0 -> Node t nts
   _ -> Node nt $ NE.fromList $ NE.tail $
        NE.map fst $ NE.scanl f (NE.head nts, 1) nts
     where f (_, j) (k', v', t') = let nextT = if j == i then t else t'
                                   in ((k', v', nextT), j+1)
-    
+
+maxT :: Ord k => Tree k v -> k
+maxT Empty = error "Empty tree has no max"
+maxT (Node _ nts) = maximum $ NE.map fst' nts
+          
 fst' :: (a, b, c) -> a
 fst' (x, _, _) = x
 
