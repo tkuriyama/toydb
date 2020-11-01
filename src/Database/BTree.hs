@@ -1,5 +1,15 @@
 {-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE FlexibleContexts #-}
+
 module Database.BTree where
+
+-- Invariants (order m)
+-- 1. every non-leaf node has min (ceil $ m `div` 2) children
+-- 1.a. the root has min 2 children (unless it's a leaf)
+-- 2. every node has max m children
+-- 3. every leaf node is on the same level
+-- 4. every (non-leaf) node with n children has n - 1 keys
 
 import Data.Function (on)
 import qualified Data.List as L
@@ -16,7 +26,7 @@ type Order = Int
 data Tree k v
   = Empty
   | Node (Tree k v) (NE.NonEmpty (k, v, Tree k v))
-  deriving (Show, Eq)
+  deriving (Show, Eq, Foldable)
   
 data InsertResult k v
   = NoPop (Tree k v)
@@ -25,20 +35,20 @@ data InsertResult k v
 
 ------------------------ Seach ------------------------ 
 
-findT :: Ord k => k -> BTree k v -> Maybe v
-findT k (BTree ord t) = case t of
+findBT :: Ord k => k -> BTree k v -> Maybe v
+findBT k (BTree ord t) = case t of
   Empty -> Nothing
   (Node _ nts) ->
     if k `elem` keys then
       Just $ snd' $ head $ NE.dropWhile (\(k', _, _) -> k' /= k) nts
     else
-      findT k $ BTree ord $ indexT (findIndexT k t) t
+      findBT k $ BTree ord $ indexT (findIndexT k t) t
     where keys = NE.map fst' nts
 
 ------------------------ Insert ------------------------ 
 
-insertT :: Ord k => k -> v -> BTree k v -> BTree k v
-insertT k v (BTree ord t) = BTree ord $
+insertBT :: Ord k => k -> v -> BTree k v -> BTree k v
+insertBT k v (BTree ord t) = BTree ord $
   case insertTree ord k v t of
     NoPop t' -> t'
     Pop t1' k' v' t2' -> Node t1' [(k', v', t2')]
@@ -132,11 +142,18 @@ snd' (_, y, _) = y
 trd' :: (a, b, c) -> c
 trd' (_, _, z) = z
 
-empty :: Order -> BTree k v
-empty n = BTree n Empty
+------------------------ Constructors / Descriptors ------------------------
 
-showT :: (Show k, Show v) => BTree k v -> String
-showT (BTree ord t) = "Order: " ++ show ord ++ "\n" ++ showTree 0 t
+emptyBT :: Order -> BTree k v
+emptyBT n = BTree n Empty
+
+sizeBT :: Ord k => BTree k v -> Int
+sizeBT (BTree _ t) = foldr (\_ acc -> acc + 1) 0 t
+
+------------------------ Show ------------------------
+
+showBT :: (Show k, Show v) => BTree k v -> String
+showBT (BTree ord t) = "Order: " ++ show ord ++ "\n" ++ showTree 0 t
 
 showTree :: (Show k, Show v) => Int -> Tree k v -> String
 showTree _ Empty = "" 
