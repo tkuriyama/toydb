@@ -33,6 +33,11 @@ data InsertResult k v
   | Pop (Tree k v) k v (Tree k v)
   deriving (Show)
 
+data DeleteResult k v
+  = SubTree (Tree k v)
+  | Hole [(k, v)]
+  deriving (Show)
+
 ------------------------ Seach ------------------------ 
 
 findBT :: Ord k => k -> BTree k v -> Maybe v
@@ -104,6 +109,56 @@ splitNode ord (Node nt nts) =
 
 ------------------------ Delete ------------------------ 
 
+deleteBT :: Ord k => k -> BTree k v -> BTree k v
+deleteBT k (BTree ord t) = BTree ord $
+  case deleteTree ord k t of
+    SubTree t' -> t'
+    Hole xs -> fromList ord xs
+
+deleteTree :: Ord k => Order -> k -> Tree k v -> DeleteResult k v
+deleteTree _   _ Empty = Hole []
+deleteTree ord k node@(Node nt nts) = case k `elem` keys of
+  True -> case nt of
+    Empty -> deleteLeaf k node
+    (Node _ _) -> deleteSubT ord k node
+  False -> case deleteTree ord k (indexT i node) of
+             SubTree t' -> SubTree $ replaceIndexT i t' node
+             Hole xs -> tryFill ord i node xs
+  where    
+    keys = NE.map fst' nts
+    i = findIndexT k node
+
+deleteLeaf :: Ord k => k -> Tree k v -> DeleteResult k v
+deleteLeaf k (Node nt nts) = case NE.length nts of
+  1 -> Hole []
+  _ -> SubTree $ Node nt $ deleteTriple nts k
+
+deleteSubT :: Ord k => Order -> k -> Tree k v -> DeleteResult k v
+deleteSubT ord k node =
+  case h == heightT node' of
+    True -> SubTree node' 
+    False -> Hole pairs
+  where
+    h = heightT node
+    pairs = filter (\(k', _) -> k' /= k) $ toList node
+    node' = fromList ord pairs
+
+deleteTriple :: Ord k => NE.NonEmpty (k, v, Tree k v) -> k ->
+                NE.NonEmpty (k, v, Tree k v)
+deleteTriple xs k = NE.fromList $ NE.filter (\(k', _, _) -> k' /= k) xs
+
+tryFill :: Ord k => Order -> Int -> Tree k v -> [(k, v)] -> DeleteResult k v
+tryFill _ _ Empty _ = error "tryFill is undefined over an empty tree"
+tryFill ord i node@(Node _ nts) pairs =
+  case heightT node == heightT node' of 
+    True -> SubTree node'
+    False -> Hole pairs'
+  where
+    nts' = NE.toList nts
+    pairs' = pairs ++ (concatMap toList $ notIndexT i node) ++
+             zip (map fst' nts') (map snd' nts')
+    node' = fromList ord pairs'
+    
 ------------------------ Helpers ------------------------
 
 -- Find index i where search key < tree key, or otherwise index of last
@@ -119,6 +174,15 @@ indexT i (Node nt nts) = case i of
   0 -> nt
   _ -> trd' $ (NE.!!) nts (i-1)
 
+-- Return list of Trees not at index i
+notIndexT :: Ord k => Int -> Tree k v -> [Tree k v]
+notIndexT _ Empty = error "Empty tree has no index"
+notIndexT i (Node nt nts) = case i of
+  0 -> map trd' nts'
+  _ -> nt : (map trd' $ take (i-1) nts') ++ (map trd' $ drop i nts')
+  where
+    nts' = NE.toList nts
+  
 -- Replace T at index i
 replaceIndexT :: Ord k => Int -> Tree k v -> Tree k v -> Tree k v
 replaceIndexT _ _ Empty = error "Empty tree cannot be indexed"
@@ -129,10 +193,27 @@ replaceIndexT i t (Node nt nts) = case i of
     where f (_, j) (k', v', t') = let nextT = if j == i then t else t'
                                   in ((k', v', nextT), j+1)
 
+toList :: Ord k => Tree k v -> [(k, v)]
+toList Empty = []
+toList (Node nt nts) = case nt of
+  Empty -> pairs 
+  t -> toList t ++ pairs ++ concatMap toList ts
+  where nts' = NE.toList nts
+        (keys, vals, ts) = (map fst' nts', map snd' nts', map trd' nts')
+        pairs = zip keys vals
+
+fromList :: Ord k => Order -> [(k, v)] -> Tree k v
+fromList ord = tree . L.foldr f (emptyBT ord)
+  where f (k, v) t = insertBT k v t
+                
 maxT :: Ord k => Tree k v -> k
 maxT Empty = error "Empty tree has no max"
 maxT (Node _ nts) = maximum $ NE.map fst' nts
-          
+
+heightT :: Ord k => Tree k v -> Int
+heightT Empty = 0
+heightT (Node nt _) = 1 + heightT nt
+                    
 fst' :: (a, b, c) -> a
 fst' (x, _, _) = x
 
