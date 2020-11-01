@@ -41,6 +41,19 @@ spec = do
                 in (isJust $ BT.findBT y' $ mkIntTree ord' y') == False
                    && (isJust $ BT.findBT (-1) $ mkIntTree ord' y') == False
 
+  describe "deleteBT" $ do
+
+    it "qcheck: size is always consistent" $ property $
+      \ord y i -> let (ord', y') = (max 3 $ abs ord, (abs y) + 1)
+                      i' = max 0 (min i (y' - 1))
+                      t = mkIntTree ord' y'
+                  in (BT.sizeBT t - 1) == (BT.sizeBT $ BT.deleteBT i' t)
+    
+    it "qtcheck: BTree invariants 1, 2, 3" $ property $
+      \ord y i -> let (ord', y') = (max 3 $ abs ord, abs y)
+                      i' = max 0 (min i y')
+                  in (validBT $ BT.deleteBT i' $ mkIntTree ord' y') == True
+
 ------------------------ Helpers ------------------------
 
 validBT :: Ord k => BT.BTree k v -> Bool
