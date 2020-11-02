@@ -8,8 +8,8 @@ A [Recurse Center](https://www.recurse.com/) FP study group project.
 ## Specifications 
 
 * REPL for database interaction
-* In-memory representation as B-Tree
-* Serialization / Deserialization to and from disk
+* In-memory representation as B-Tree (or B-Plus Tree)
+* Serialization / Deserialization to and from disk (as text files)
 * Table interactions: simple `CREATE` and `DROP` only 
 * Record interactions: simple `SELECT`, `INSERT` and `DELETE` only
 * Record data types: support for `Int`, `Text`, and `Bool` types only 
