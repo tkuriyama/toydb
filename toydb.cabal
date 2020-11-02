@@ -25,7 +25,6 @@ executable toydb
       Database.Main
       Database.BTree
       Database.BPlusTree      
-      Database.BPTreeView
   build-depends:       
       base >= 4.7 && < 5
     , text
@@ -43,7 +42,6 @@ library
       Database.Parser
       Database.Lexer
       Database.Repl
-      Database.BPTreeView
   hs-source-dirs:
       src
   default-extensions:
