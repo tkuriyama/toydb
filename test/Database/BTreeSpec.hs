@@ -27,7 +27,7 @@ spec = do
                    
     it "qtcheck: BTree invariants 1, 2, 3" $ property $
       \ord y -> let (ord', y') = (max 3 $ abs ord, abs y)
-                in (validBT $ mkIntTree ord' y') == True
+                in (BT.validBT $ mkIntTree ord' y') == True
 
   describe "findBT" $ do
     
@@ -52,37 +52,9 @@ spec = do
     it "qtcheck: BTree invariants 1, 2, 3" $ property $
       \ord y i -> let (ord', y') = (max 3 $ abs ord, abs y)
                       i' = max 0 (min i y')
-                  in (validBT $ BT.deleteBT i' $ mkIntTree ord' y') == True
+                  in (BT.validBT $ BT.deleteBT i' $ mkIntTree ord' y') == True
 
------------------------- Helpers ------------------------
-
-validBT :: Ord k => BT.BTree k v -> Bool
-validBT (BT.BTree ord t) = validRoot ord t
-
-validRoot :: Ord k => BT.Order -> BT.Tree k v -> Bool
-validRoot ord BT.Empty = True
-validRoot ord (BT.Node nt nts) =
-  NE.length nts <= ord - 1 && -- IV 2
-  validTree ord nt && 
-  all (\(_, _, t) -> validTree ord $ t) nts
-
-validTree :: Ord k => BT.Order -> BT.Tree k v -> Bool
-validTree ord BT.Empty = True
-validTree ord (BT.Node BT.Empty nts) =
-  NE.length nts <= ord - 1 && -- IV 2
-  all (validLeaf) nts -- IV 3
-validTree ord (BT.Node nt nts) =
-  NE.length nts <= ord - 1 && -- IV 2
-  NE.length nts >= (ceiling $ (fromIntegral ord) / 2) - 1 && -- IV 1
-  validTree ord nt &&
-  all (\(_, _, t) -> validTree ord $ t) nts
-
-validLeaf :: Ord k => (k, v, BT.Tree k v) -> Bool
-validLeaf (_, _, t) = case t of
-  BT.Empty -> True
-  _ -> False
-
-  
+------------------------ Helpers ------------------------  
 mkIntTree :: BT.Order -> Int -> BT.BTree Int String
 mkIntTree ord n = foldr f (BT.emptyBT ord) pairs
   where pairs = zipWith (\k v -> (k, 'v':(show v))) [0..(n-1)] [0..]

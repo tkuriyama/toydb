@@ -69,6 +69,7 @@ insertTree ord k v node@(Node nt nts) = case k `elem` keys of
     keys = NE.map fst' nts
 
 insertLeaf :: Ord k => Order -> k -> v -> Tree k v -> InsertResult k v
+insertLeaf _ _ _ Empty = error "insertLeaf is undefined for empty tree"
 insertLeaf ord k v (Node _ nts) =
   case hasRoom of
     True -> NoPop $ Node Empty nts'
@@ -78,6 +79,7 @@ insertLeaf ord k v (Node _ nts) =
     nts' = insertTriple nts (k, v, Empty)
     
 insertSubT :: Ord k => Order -> k -> v -> Tree k v -> InsertResult k v
+insertSubT _ _ _ Empty = error "insertSubT is undefined for empty tree"
 insertSubT ord k v node@(Node _ nts) =
   case insertTree ord k v (indexT i node) of
     NoPop t' -> NoPop $ replaceIndexT i t' node
@@ -129,17 +131,17 @@ deleteTree ord k node@(Node nt nts) = case k `elem` keys of
     i = findIndexT k node
 
 deleteLeaf :: Ord k => k -> Tree k v -> DeleteResult k v
+deleteLeaf _ Empty = error "deleteLeaf is undefined for empty tree"
 deleteLeaf k (Node nt nts) = case NE.length nts of
   1 -> Hole []
   _ -> SubTree $ Node nt $ deleteTriple nts k
 
 deleteSubT :: Ord k => Order -> k -> Tree k v -> DeleteResult k v
 deleteSubT ord k node =
-  case h == heightT node' of
+  case heightT node == heightT node' && validTree ord node' of
     True -> SubTree node' 
     False -> Hole pairs
   where
-    h = heightT node
     pairs = filter (\(k', _) -> k' /= k) $ toList node
     node' = fromList ord pairs
 
@@ -213,7 +215,7 @@ maxT (Node _ nts) = maximum $ NE.map fst' nts
 heightT :: Ord k => Tree k v -> Int
 heightT Empty = 0
 heightT (Node nt _) = 1 + heightT nt
-                    
+
 fst' :: (a, b, c) -> a
 fst' (x, _, _) = x
 
@@ -245,3 +247,34 @@ showTree n (Node nt nts) =
   where (keys, vals, nts') = ( NE.map fst' nts
                              , NE.map snd' nts
                              ,NE.map trd' nts )
+
+------------------------ Test Helpers------------------------
+
+validBT :: Ord k => BTree k v -> Bool
+validBT (BTree ord t) = validRoot ord t
+
+validRoot :: Ord k => Order -> Tree k v -> Bool
+validRoot _ Empty = True
+validRoot ord (Node nt nts) = case nt of
+  Empty -> NE.length nts <= ord - 1 -- IV 2
+  _ -> NE.length nts >= 2 && -- IV 1.a
+       NE.length nts <= ord - 1 && -- IV 2
+       validTree ord nt && 
+       all (\(_, _, t) -> validTree ord $ t) nts
+
+validTree :: Ord k => Order -> Tree k v -> Bool
+validTree _ Empty = True
+validTree ord (Node Empty nts) =
+  NE.length nts <= ord - 1 && -- IV 2
+  all (validLeaf) nts -- IV 3
+validTree ord (Node nt nts) =
+  NE.length nts >= (ceiling $ (fromIntegral ord) / 2) - 1 && -- IV 1
+  NE.length nts <= ord - 1 && -- IV 2
+  validTree ord nt &&
+  all (\(_, _, t) -> validTree ord $ t) nts
+
+validLeaf :: Ord k => (k, v, Tree k v) -> Bool
+validLeaf (_, _, t) = case t of
+  Empty -> True
+  _ -> False
+
