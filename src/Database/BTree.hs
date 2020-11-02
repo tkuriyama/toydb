@@ -257,7 +257,7 @@ validRoot :: Ord k => Order -> Tree k v -> Bool
 validRoot _ Empty = True
 validRoot ord (Node nt nts) = case nt of
   Empty -> NE.length nts <= ord - 1 -- IV 2
-  _ -> NE.length nts >= 2 && -- IV 1.a
+  _ -> NE.length nts >= 1 && -- IV 1.a
        NE.length nts <= ord - 1 && -- IV 2
        validTree ord nt && 
        all (\(_, _, t) -> validTree ord $ t) nts
