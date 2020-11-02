@@ -48,7 +48,12 @@ spec = do
                       i' = max 0 (min i (y' - 1))
                       t = mkIntTree ord' y'
                   in (BT.sizeBT t - 1) == (BT.sizeBT $ BT.deleteBT i' t)
-    
+
+    it "qcheck: deleting non-existent key has no effect" $ property $
+      \ord y -> let (ord', y') = (max 3 $ abs ord, (abs y) + 1)
+                    t = mkIntTree ord' y'
+                in t == BT.deleteBT (y'+1) t
+
     it "qtcheck: BTree invariants 1, 2, 3" $ property $
       \ord y i -> let (ord', y') = (max 3 $ abs ord, abs y)
                       i' = max 0 (min i y')
