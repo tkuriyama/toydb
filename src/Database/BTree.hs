@@ -1,3 +1,6 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverloadedLists #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -27,7 +30,7 @@ data Tree k v
   = Empty
   | Node (Tree k v) (NE.NonEmpty (k, v, Tree k v))
   deriving (Show, Eq, Foldable)
-  
+
 data InsertResult k v
   = NoPop (Tree k v)
   | Pop (Tree k v) k v (Tree k v)
@@ -38,7 +41,7 @@ data DeleteResult k v
   | Hole [(k, v)]
   deriving (Show)
 
------------------------- Seach ------------------------ 
+------------------------ Search ------------------------
 
 findBT :: Ord k => k -> BTree k v -> Maybe v
 findBT k (BTree ord t) = case t of
@@ -77,7 +80,7 @@ insertLeaf ord k v (Node _ nts) =
   where
     hasRoom = NE.length nts < ord - 1
     nts' = insertTriple nts (k, v, Empty)
-    
+
 insertSubT :: Ord k => Order -> k -> v -> Tree k v -> InsertResult k v
 insertSubT _ _ _ Empty = error "insertSubT is undefined for empty tree"
 insertSubT ord k v node@(Node _ nts) =
@@ -96,7 +99,7 @@ mergeNoPop _ Empty _ _ _ _ = error "Cannot mergeNoPop empty tree"
 mergeNoPop i (Node nt nts) t1 k v t2 = case i of
   0 -> NoPop $ Node t1 $ (k, v, t2) NE.<| nts
   _ -> NoPop $ replaceIndexT i t1 $ Node nt $ insertTriple nts (k, v, t2)
-                                        
+
 insertTriple :: Ord k => NE.NonEmpty (k, v, Tree k v) -> (k, v, Tree k v) ->
                 NE.NonEmpty (k, v, Tree k v)
 insertTriple xs x = NE.fromList $

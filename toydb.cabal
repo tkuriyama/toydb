@@ -37,6 +37,7 @@ library
       Database.Main
       Database.Syntax
       Database.BTree
+      Database.BTreeV2
       Database.BPlusTree
       Database.Serialize
       Database.Parser
